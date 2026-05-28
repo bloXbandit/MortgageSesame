@@ -1,0 +1,240 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Pika Color Tokens ────────────────────────────────────────────── */
+  --color-buttermilk: #ffedd2;
+  --color-inkwell: #0d0d0d;
+  --color-carbon: #1f1f1f;
+  --color-carbon-light: #2a2a2a;
+  --color-paper: #ffffff;
+  --color-ash: #9e9e9e;
+  --color-chrome: #e5e7eb;
+  --color-warm-accent: #f5c87a;
+  --color-warm-mid: #e8a84c;
+
+  /* ── Typography ───────────────────────────────────────────────────── */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* ── Spacing ──────────────────────────────────────────────────────── */
+  --spacing-unit: 4px;
+
+  /* ── Radius ───────────────────────────────────────────────────────── */
+  --radius-btn: 6px;
+  --radius-card: 10px;
+  --radius-input: 6px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-buttermilk);
+  color: var(--color-inkwell);
+}
+
+/* ── Custom scrollbar (subtle) ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-chrome); border-radius: 3px; }
+
+/* ── Focus rings ────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-warm-accent);
+  outline-offset: 2px;
+}
+
+/* ── Selection ──────────────────────────────────────────────────────── */
+::selection {
+  background: var(--color-warm-accent);
+  color: var(--color-inkwell);
+}
+
+/* ── Utility classes ────────────────────────────────────────────────── */
+.font-display-heavy {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 2rem;
+  line-height: 1.13;
+  letter-spacing: 0.32px;
+}
+
+.font-body-lg {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0.16px;
+}
+
+.font-body-sm {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.43;
+  letter-spacing: -0.28px;
+}
+
+/* ── Split layout ───────────────────────────────────────────────────── */
+.split-left {
+  background: var(--color-buttermilk);
+  color: var(--color-inkwell);
+}
+
+.split-right {
+  background: var(--color-carbon);
+  color: var(--color-paper);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--color-buttermilk);
+  color: var(--color-inkwell);
+  border: 1px solid var(--color-chrome);
+  border-radius: var(--radius-btn);
+  padding: 10px 16px;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background: #fde4b8;
+  border-color: #c8c8c8;
+}
+
+.btn-dark {
+  background: var(--color-inkwell);
+  color: var(--color-paper);
+  border: 1px solid #333;
+  border-radius: var(--radius-btn);
+  padding: 10px 20px;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-dark:hover { background: #222; }
+
+.btn-warm {
+  background: var(--color-warm-accent);
+  color: var(--color-inkwell);
+  border: none;
+  border-radius: var(--radius-btn);
+  padding: 12px 24px;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-warm:hover { background: var(--color-warm-mid); }
+
+/* ── Input ──────────────────────────────────────────────────────────── */
+.input-field {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--color-chrome);
+  border-radius: var(--radius-input);
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--color-paper);
+  transition: border-color 0.15s;
+  outline: none;
+}
+
+.input-field::placeholder { color: #666; }
+.input-field:focus { border-color: var(--color-warm-accent); }
+
+.input-field-light {
+  width: 100%;
+  background: white;
+  border: 1px solid var(--color-chrome);
+  border-radius: var(--radius-input);
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--color-inkwell);
+  transition: border-color 0.15s;
+  outline: none;
+}
+
+.input-field-light:focus { border-color: var(--color-warm-accent); }
+
+/* ── Cards ──────────────────────────────────────────────────────────── */
+.card-dark {
+  background: var(--color-carbon-light);
+  border: 1px solid #333;
+  border-radius: var(--radius-card);
+  padding: 24px;
+}
+
+/* ── Progress steps ──────────────────────────────────────────────────── */
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #444;
+  transition: background 0.2s;
+}
+
+.step-dot.active { background: var(--color-warm-accent); }
+.step-dot.completed { background: var(--color-warm-mid); }
+
+/* ── Checkbox ──────────────────────────────────────────────────────── */
+.checkbox-warm {
+  accent-color: var(--color-warm-accent);
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Badge ──────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-warm { background: #fff3dc; color: #92520b; }
+.badge-dark { background: #2a2a2a; color: #aaa; }
+
+/* ── Animations ─────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up { animation: fadeUp 0.4s ease both; }
+
+@keyframes pulse-warm {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.pulse-warm { animation: pulse-warm 2s ease-in-out infinite; }
