@@ -7,7 +7,7 @@ setup:
 
 dev:
 	@echo "Starting backend, public-site, and admin-app..."
-	(cd backend && source .venv/bin/activate && uvicorn main:app --reload --port 8000) &
+	(cd backend && source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000) &
 	(cd public-site && npm run dev) &
 	(cd admin-app && npm run dev)
 

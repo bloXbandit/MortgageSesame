@@ -4,6 +4,7 @@ from sqlalchemy import String, Boolean, DateTime, Text, Enum as SAEnum, ForeignK
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
+from typing import Optional
 
 
 class AgentActionType(str, enum.Enum):
@@ -46,13 +47,13 @@ class AgentRun(Base):
     agent_name: Mapped[str] = mapped_column(String(100), nullable=False)
     run_type: Mapped[str] = mapped_column(String(100))
     status: Mapped[AgentActionStatus] = mapped_column(SAEnum(AgentActionStatus), default=AgentActionStatus.PENDING)
-    input_payload: Mapped[dict | None] = mapped_column(JSON)
-    output_payload: Mapped[dict | None] = mapped_column(JSON)
-    error_message: Mapped[str | None] = mapped_column(Text)
-    actions_count: Mapped[int | None] = mapped_column()
-    duration_ms: Mapped[float | None] = mapped_column(Float)
+    input_payload: Mapped[Optional[dict]] = mapped_column(JSON)
+    output_payload: Mapped[Optional[dict]] = mapped_column(JSON)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    actions_count: Mapped[Optional[int]] = mapped_column()
+    duration_ms: Mapped[Optional[float]] = mapped_column(Float)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     actions: Mapped[list["AgentAction"]] = relationship("AgentAction", back_populates="run", cascade="all, delete-orphan")
 
@@ -64,9 +65,9 @@ class AgentAction(Base):
     run_id: Mapped[str] = mapped_column(String, ForeignKey("agent_runs.id"), nullable=False)
     action_type: Mapped[AgentActionType] = mapped_column(SAEnum(AgentActionType), nullable=False)
     status: Mapped[AgentActionStatus] = mapped_column(SAEnum(AgentActionStatus), default=AgentActionStatus.PENDING)
-    input_data: Mapped[dict | None] = mapped_column(JSON)
-    output_data: Mapped[dict | None] = mapped_column(JSON)
-    error_message: Mapped[str | None] = mapped_column(Text)
+    input_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    output_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     executed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -79,14 +80,14 @@ class ApprovalQueue(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     item_type: Mapped[ApprovalItemType] = mapped_column(SAEnum(ApprovalItemType), nullable=False)
     item_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    title: Mapped[str | None] = mapped_column(String(500))
-    preview: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[Optional[str]] = mapped_column(String(500))
+    preview: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     priority: Mapped[int] = mapped_column(default=0)
-    created_by: Mapped[str | None] = mapped_column(String(100))
-    reviewed_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"))
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[Optional[str]] = mapped_column(String(100))
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"))
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -95,16 +96,16 @@ class Task(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
-    task_type: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    task_type: Mapped[Optional[str]] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(50), default="open")
     priority: Mapped[str] = mapped_column(String(20), default="normal")
-    due_date: Mapped[datetime | None] = mapped_column(DateTime)
-    contact_id: Mapped[str | None] = mapped_column(String, ForeignKey("contacts.id"))
-    campaign_id: Mapped[str | None] = mapped_column(String, ForeignKey("campaigns.id"))
-    assigned_to: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"))
-    created_by: Mapped[str | None] = mapped_column(String(100))
-    notes: Mapped[str | None] = mapped_column(Text)
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    contact_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("contacts.id"))
+    campaign_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("campaigns.id"))
+    assigned_to: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"))
+    created_by: Mapped[Optional[str]] = mapped_column(String(100))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

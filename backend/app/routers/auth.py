@@ -11,6 +11,7 @@ from app.middleware.auth import (
     decode_token, get_current_user,
 )
 from app.middleware.audit import log_event
+from typing import Optional
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -24,8 +25,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    nmls_id: str | None = None
-    company_name: str | None = None
+    nmls_id: Optional[str] = None
+    company_name: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -124,6 +125,6 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "nmls_id": current_user.nmls_id,
         "company_name": current_user.company_name,
-        "calendly_link": current_user.calendly_link,
+        "calcom_link": current_user.calcom_link,
         "brand_voice": current_user.brand_voice,
     }

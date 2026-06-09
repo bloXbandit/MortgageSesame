@@ -12,7 +12,7 @@ export default function Settings() {
     full_name: user?.full_name || '',
     nmls_id: user?.nmls_id || '',
     company_name: user?.company_name || '',
-    calendly_link: user?.calendly_link || '',
+    calcom_link: user?.calcom_link || '',
     brand_voice: user?.brand_voice || '',
   })
 
@@ -99,7 +99,7 @@ export default function Settings() {
             <Field label="NMLS ID" value={profile.nmls_id} onChange={v => setProfile(p => ({ ...p, nmls_id: v }))} placeholder="123456" />
           </div>
           <Field label="Company Name" value={profile.company_name} onChange={v => setProfile(p => ({ ...p, company_name: v }))} />
-          <Field label="Calendly / Booking Link" value={profile.calendly_link} onChange={v => setProfile(p => ({ ...p, calendly_link: v }))} placeholder="https://calendly.com/you" />
+          <Field label="Cal.com / Booking Link" value={profile.calcom_link} onChange={v => setProfile(p => ({ ...p, calcom_link: v }))} placeholder="https://cal.com/your-handle/home-purchase-consultation" />
           <div>
             <label style={labelStyle}>Brand Voice / Tone (used by AI for content & outreach)</label>
             <textarea className="input" rows={3} value={profile.brand_voice}

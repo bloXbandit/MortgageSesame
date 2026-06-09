@@ -4,6 +4,7 @@ from sqlalchemy import String, Boolean, DateTime, Text, Enum as SAEnum, ForeignK
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
+from typing import Optional
 
 
 class LoanInterestType(str, enum.Enum):
@@ -54,34 +55,46 @@ class Timeline(str, enum.Enum):
     JUST_EXPLORING = "just_exploring"
 
 
+class PipelineStatus(str, enum.Enum):
+    NEW             = "new"
+    CONTACTED       = "contacted"
+    APPOINTMENT_SET = "appointment_set"
+    PRE_APPROVED    = "pre_approved"
+    CLOSED          = "closed"
+    LOST            = "lost"
+
+
 class LeadIntake(Base):
     __tablename__ = "lead_intakes"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    first_name: Mapped[str | None] = mapped_column(String(100))
-    last_name: Mapped[str | None] = mapped_column(String(100))
-    email: Mapped[str | None] = mapped_column(String(255), index=True)
-    phone: Mapped[str | None] = mapped_column(String(30))
-    state: Mapped[str | None] = mapped_column(String(50))
-    county: Mapped[str | None] = mapped_column(String(100))
-    city: Mapped[str | None] = mapped_column(String(100))
-    loan_interest_type: Mapped[LoanInterestType | None] = mapped_column(SAEnum(LoanInterestType))
-    timeline: Mapped[Timeline | None] = mapped_column(SAEnum(Timeline))
-    credit_score_range: Mapped[CreditScoreRange | None] = mapped_column(SAEnum(CreditScoreRange))
-    income_range: Mapped[IncomeRange | None] = mapped_column(SAEnum(IncomeRange))
-    current_rent_mortgage: Mapped[str | None] = mapped_column(String(100))
-    cash_available: Mapped[str | None] = mapped_column(String(100))
-    property_goal: Mapped[PropertyGoal | None] = mapped_column(SAEnum(PropertyGoal))
+    first_name: Mapped[Optional[str]] = mapped_column(String(100))
+    last_name: Mapped[Optional[str]] = mapped_column(String(100))
+    email: Mapped[Optional[str]] = mapped_column(String(255), index=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(30))
+    state: Mapped[Optional[str]] = mapped_column(String(50))
+    county: Mapped[Optional[str]] = mapped_column(String(100))
+    city: Mapped[Optional[str]] = mapped_column(String(100))
+    loan_interest_type: Mapped[Optional[LoanInterestType]] = mapped_column(SAEnum(LoanInterestType))
+    timeline: Mapped[Optional[Timeline]] = mapped_column(SAEnum(Timeline))
+    credit_score_range: Mapped[Optional[CreditScoreRange]] = mapped_column(SAEnum(CreditScoreRange))
+    income_range: Mapped[Optional[IncomeRange]] = mapped_column(SAEnum(IncomeRange))
+    current_rent_mortgage: Mapped[Optional[str]] = mapped_column(String(100))
+    cash_available: Mapped[Optional[str]] = mapped_column(String(100))
+    property_goal: Mapped[Optional[PropertyGoal]] = mapped_column(SAEnum(PropertyGoal))
     consent_email: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_sms: Mapped[bool] = mapped_column(Boolean, default=False)
     consent_call: Mapped[bool] = mapped_column(Boolean, default=False)
-    ip_address: Mapped[str | None] = mapped_column(String(50))
-    user_agent: Mapped[str | None] = mapped_column(String(500))
-    source_url: Mapped[str | None] = mapped_column(String(500))
-    utm_source: Mapped[str | None] = mapped_column(String(100))
-    utm_campaign: Mapped[str | None] = mapped_column(String(100))
-    raw_answers: Mapped[dict | None] = mapped_column(JSON)
-    contact_id: Mapped[str | None] = mapped_column(String, ForeignKey("contacts.id"))
+    ip_address: Mapped[Optional[str]] = mapped_column(String(50))
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
+    source_url: Mapped[Optional[str]] = mapped_column(String(500))
+    utm_source: Mapped[Optional[str]] = mapped_column(String(100))
+    utm_campaign: Mapped[Optional[str]] = mapped_column(String(100))
+    raw_answers: Mapped[Optional[dict]] = mapped_column(JSON)
+    contact_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("contacts.id"))
+    pipeline_status: Mapped[str] = mapped_column(String(50), default="new")
+    notes: Mapped[Optional[str]] = mapped_column(Text)          # agent / operator notes
+    target_price: Mapped[Optional[float]] = mapped_column(Float)  # buyer's target purchase price
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     score: Mapped["LeadScore"] = relationship("LeadScore", back_populates="intake", uselist=False, cascade="all, delete-orphan")
@@ -92,14 +105,14 @@ class LeadScore(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     intake_id: Mapped[str] = mapped_column(String, ForeignKey("lead_intakes.id"), unique=True, nullable=False)
-    score_value: Mapped[float | None] = mapped_column(Float)
-    score_label: Mapped[str | None] = mapped_column(String(50))
-    recommended_product: Mapped[str | None] = mapped_column(String(255))
-    readiness_score: Mapped[int | None] = mapped_column(Integer)
-    summary: Mapped[str | None] = mapped_column(Text)
-    questions_for_call: Mapped[list | None] = mapped_column(JSON)
-    recommended_cta: Mapped[str | None] = mapped_column(String(500))
-    compliance_response: Mapped[str | None] = mapped_column(Text)
+    score_value: Mapped[Optional[float]] = mapped_column(Float)
+    score_label: Mapped[Optional[str]] = mapped_column(String(50))
+    recommended_product: Mapped[Optional[str]] = mapped_column(String(255))
+    readiness_score: Mapped[Optional[int]] = mapped_column(Integer)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    questions_for_call: Mapped[Optional[list]] = mapped_column(JSON)
+    recommended_cta: Mapped[Optional[str]] = mapped_column(String(500))
+    compliance_response: Mapped[Optional[str]] = mapped_column(Text)
     scored_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     scored_by: Mapped[str] = mapped_column(String(50), default="ai")
 

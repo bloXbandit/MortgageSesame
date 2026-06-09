@@ -1,5 +1,7 @@
 import { useLocation, Link } from 'react-router-dom'
-import { CheckCircle, Calendar, ArrowRight } from 'lucide-react'
+import { CheckCircle, Calendar, ArrowRight, FileText } from 'lucide-react'
+
+import { CALCOM, APP_1003, BANKER_NMLS } from '../config'
 
 export default function ThankYou() {
   const { state } = useLocation()
@@ -33,13 +35,51 @@ export default function ThankYou() {
           )}
         </div>
 
+        {/* Primary CTA — Book a call */}
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <a href="https://calendly.com/[YOUR_LINK]" target="_blank" rel="noopener noreferrer" className="btn-dark">
+          <a href={CALCOM} target="_blank" rel="noopener noreferrer" className="btn-dark">
             <Calendar size={14} /> Book a Call Now
           </a>
           <Link to="/" className="btn-primary">
             Back to Home <ArrowRight size={14} />
           </Link>
+        </div>
+
+        {/* Secondary CTA — 1003 application (for already-sold prospects) */}
+        <div style={{
+          borderTop: '1px solid #e8ddd0', paddingTop: '24px',
+          display: 'flex', flexDirection: 'column', gap: '10px',
+        }}>
+          <p style={{ margin: 0, fontSize: '0.8125rem', color: '#666', fontWeight: 500 }}>
+            Already talked to us and ready to go?
+          </p>
+          <a
+            href={APP_1003}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '11px 20px',
+              background: 'transparent',
+              border: '1.5px solid #c8860a',
+              borderRadius: '7px',
+              color: '#92520b',
+              fontWeight: 700,
+              fontSize: '0.875rem',
+              textDecoration: 'none',
+              width: 'fit-content',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fff3dc' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <FileText size={15} />
+            Start My Mortgage Application (1003) →
+          </a>
+          <p style={{ margin: 0, fontSize: '0.72rem', color: '#999', lineHeight: 1.5 }}>
+            Only start this if we've already spoken — this opens a full mortgage application
+            that connects directly to our loan origination system.
+          </p>
         </div>
       </div>
 
@@ -74,7 +114,7 @@ export default function ThankYou() {
         <div style={{ marginTop: '16px', paddingTop: '24px', borderTop: '1px solid #2a2a2a' }}>
           <p style={{ fontSize: '0.7rem', color: '#555', lineHeight: 1.6, margin: 0 }}>
             This is not a credit decision or commitment to lend. All inquiries are subject to verification
-            and underwriting review. Equal Housing Opportunity. NMLS# [YOUR_NMLS].
+            and underwriting review. Equal Housing Opportunity. NMLS# {BANKER_NMLS}.
           </p>
         </div>
       </div>

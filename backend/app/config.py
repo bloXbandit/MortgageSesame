@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -12,7 +13,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:5174"
 
     # Database
-    database_url: str = "postgresql+asyncpg://mortgagesesame:mortgagesesame@localhost:5432/mortgagesesame"
+    database_url: str = "sqlite+aiosqlite:///./mortgagesesame.db"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -22,6 +23,12 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
+
+    # FRED (Freddie Mac PMMS weekly rate data + Prime Rate for HELOC)
+    # Free key at: https://fred.stlouisfed.org/docs/api/api_key.html
+    fred_api_key: str = ""
+    # HELOC = Prime Rate + this spread (Prime currently ~8.5%, so HELOC ~9.0%)
+    heloc_prime_spread: float = 0.5
 
     # AI
     openai_api_key: str = ""
@@ -33,11 +40,13 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
     elevenlabs_agent_voice_name: str = ""
+    agent_persona_name: str = "Kenny"   # what the voice agent calls itself
 
-    # Twilio
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_from_number: str = ""
+    # SignalWire
+    signalwire_account_sid: str = ""
+    signalwire_auth_token: str = ""
+    signalwire_from_number: str = ""
+    signalwire_space: str = ""
 
     # Email
     smtp_host: str = "smtp.gmail.com"
@@ -69,15 +78,53 @@ class Settings(BaseSettings):
     agent_api_key: str = "CHANGE_ME"
     agent_webhook_url: str = ""
 
+    # Internal admin seed (auto-created on startup if not exists)
+    admin_seed_email: str = ""
+    admin_seed_password: str = ""
+    admin_seed_full_name: str = ""
+    admin_seed_nmls_id: str = ""
+
     # Booking
-    calendly_link: str = ""
+    calcom_link: str = "https://cal.com/kmanjo-vzz/home-purchase-consultation"
+
+    # Image generation — AI avatar / flyer creation
+    avatar_provider: str = "auto"       # auto | openai | fal | replicate | passthrough
+    fal_api_key: str = ""               # fal.ai — face-consistent generation (flux-pulid)
+    replicate_api_token: str = ""       # Replicate — backup image generation
+    media_storage_path: str = "./media" # local path for all generated files
+
+    # Content pipeline mode switches
+    campaign_video_provider: str = "mock"   # mock | heygen
+    content_publish_mode: str = "mock"      # mock | live
+    campaign_email_provider: str = "mock"   # mock | gmail | resend | sendgrid
+    campaign_sms_provider: str = "mock"     # mock | signalwire | twilio
+    campaign_direct_mail_provider: str = "mock"  # mock | lob | postgrid
+    campaign_property_provider: str = "mock"     # mock | attom
+
+    # Background removal
+    remove_bg_api_key: str = ""         # remove.bg — 50 free/month, any Python version
+
+    # Flyer compositing provider
+    flyer_composer: str = "pillow"      # pillow | bannerbear (falls back to pillow on error)
+    bannerbear_api_key: str = ""
+    bannerbear_template_social_square: str = ""
+    bannerbear_template_facebook_banner: str = ""
+    bannerbear_template_story: str = ""
+    bannerbear_template_wide_banner: str = ""
+
+    # Banker identity — change these to white-label for another user
+    banker_name: str = "Kenneth"
+    banker_nmls: str = "1454510"
+    app_1003_url: str = "https://2704714.my1003app.com/1454510/register"
+    zillow_url: str = "https://www.zillow.com/lender-profile/kmanjo2/"
+    service_states: str = "Maryland & DC"
 
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
 
     class Config:
-        env_file = ".env"
+        env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
         extra = "ignore"
 
 

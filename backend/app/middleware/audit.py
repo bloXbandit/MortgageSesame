@@ -1,21 +1,22 @@
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.compliance import AuditLog
+from typing import Optional
 
 
 async def log_event(
     db: AsyncSession,
     action: str,
     actor_type: str = "system",
-    actor_id: str | None = None,
-    actor_name: str | None = None,
-    resource_type: str | None = None,
-    resource_id: str | None = None,
-    details: dict | None = None,
-    ip_address: str | None = None,
-    user_agent: str | None = None,
-    channel: str | None = None,
-    status: str | None = "success",
+    actor_id: Optional[str] = None,
+    actor_name: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    details: Optional[dict] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    channel: Optional[str] = None,
+    status: Optional[str] = "success",
 ):
     entry = AuditLog(
         actor_type=actor_type,

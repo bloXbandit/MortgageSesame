@@ -1,0 +1,593 @@
+"""Initial schema — all tables
+
+Revision ID: 001
+Revises:
+Create Date: 2026-06-02
+
+Creates all tables from scratch for a clean PostgreSQL deployment.
+In development, SQLite auto-creates tables via Base.metadata.create_all;
+this migration is for production PostgreSQL only.
+
+Run:
+    cd backend
+    alembic upgrade head
+"""
+
+from typing import Sequence, Union
+from alembic import op
+import sqlalchemy as sa
+
+revision: str = "001"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # ── users ────────────────────────────────────────────────────────────────
+    op.create_table("users",
+        sa.Column("id",          sa.String(),    primary_key=True),
+        sa.Column("email",       sa.String(255), unique=True, nullable=False),
+        sa.Column("full_name",   sa.String(255)),
+        sa.Column("hashed_password", sa.String(255)),
+        sa.Column("role",        sa.String(50),  default="agent"),
+        sa.Column("is_active",   sa.Boolean(),   default=True),
+        sa.Column("created_at",  sa.DateTime(),  nullable=False),
+        sa.Column("updated_at",  sa.DateTime()),
+    )
+
+    # ── products ─────────────────────────────────────────────────────────────
+    op.create_table("products",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("name",        sa.String(255), nullable=False),
+        sa.Column("product_type",sa.String(50)),
+        sa.Column("description", sa.Text()),
+        sa.Column("min_credit_score", sa.Integer()),
+        sa.Column("max_ltv",     sa.Float()),
+        sa.Column("min_down_pct",sa.Float()),
+        sa.Column("is_active",   sa.Boolean(), default=True),
+        sa.Column("created_by",  sa.String()),
+        sa.Column("created_at",  sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("product_disclaimers",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("product_id",  sa.String(), sa.ForeignKey("products.id")),
+        sa.Column("text",        sa.Text()),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    # ── contacts ─────────────────────────────────────────────────────────────
+    op.create_table("contacts",
+        sa.Column("id",           sa.String(), primary_key=True),
+        sa.Column("first_name",   sa.String(100)),
+        sa.Column("last_name",    sa.String(100)),
+        sa.Column("email",        sa.String(255), index=True),
+        sa.Column("phone",        sa.String(30)),
+        sa.Column("city",         sa.String(100)),
+        sa.Column("state",        sa.String(50)),
+        sa.Column("county",       sa.String(100)),
+        sa.Column("contact_type", sa.String(50)),
+        sa.Column("source",       sa.String(100)),
+        sa.Column("consent_email",sa.Boolean(), default=False),
+        sa.Column("consent_sms",  sa.Boolean(), default=False),
+        sa.Column("consent_call", sa.Boolean(), default=False),
+        sa.Column("consent_status",sa.String(50)),
+        sa.Column("created_at",   sa.DateTime(), nullable=False),
+        sa.Column("updated_at",   sa.DateTime()),
+    )
+
+    op.create_table("consent_records",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("contact_id",  sa.String(), sa.ForeignKey("contacts.id")),
+        sa.Column("channel",     sa.String(50)),
+        sa.Column("status",      sa.String(50)),
+        sa.Column("ip_address",  sa.String(50)),
+        sa.Column("user_agent",  sa.String(500)),
+        sa.Column("source_url",  sa.String(500)),
+        sa.Column("recorded_at", sa.DateTime()),
+    )
+
+    op.create_table("opt_outs",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("contact_id",  sa.String(), sa.ForeignKey("contacts.id")),
+        sa.Column("channel",     sa.String(50)),
+        sa.Column("reason",      sa.String(255)),
+        sa.Column("opted_out_at",sa.DateTime()),
+    )
+
+    op.create_table("lead_scores",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("contact_id",  sa.String(), sa.ForeignKey("contacts.id")),
+        sa.Column("score_value", sa.Float()),
+        sa.Column("score_label", sa.String(50)),
+        sa.Column("scored_at",   sa.DateTime()),
+    )
+
+    # ── lead_intakes ─────────────────────────────────────────────────────────
+    op.create_table("lead_intakes",
+        sa.Column("id",                  sa.String(),    primary_key=True),
+        sa.Column("first_name",          sa.String(100)),
+        sa.Column("last_name",           sa.String(100)),
+        sa.Column("email",               sa.String(255), index=True),
+        sa.Column("phone",               sa.String(30)),
+        sa.Column("state",               sa.String(50)),
+        sa.Column("county",              sa.String(100)),
+        sa.Column("city",                sa.String(100)),
+        sa.Column("loan_interest_type",  sa.String(50)),
+        sa.Column("timeline",            sa.String(50)),
+        sa.Column("credit_score_range",  sa.String(50)),
+        sa.Column("income_range",        sa.String(50)),
+        sa.Column("current_rent_mortgage",sa.String(100)),
+        sa.Column("cash_available",      sa.String(100)),
+        sa.Column("property_goal",       sa.String(50)),
+        sa.Column("consent_email",       sa.Boolean(), default=False),
+        sa.Column("consent_sms",         sa.Boolean(), default=False),
+        sa.Column("consent_call",        sa.Boolean(), default=False),
+        sa.Column("ip_address",          sa.String(50)),
+        sa.Column("user_agent",          sa.String(500)),
+        sa.Column("source_url",          sa.String(500)),
+        sa.Column("utm_source",          sa.String(100)),
+        sa.Column("utm_campaign",        sa.String(100)),
+        sa.Column("raw_answers",         sa.JSON()),
+        sa.Column("pipeline_status",     sa.String(50), default="new"),
+        sa.Column("contact_id",          sa.String(), sa.ForeignKey("contacts.id")),
+        sa.Column("created_at",          sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("lead_scores",
+        sa.Column("id",                  sa.String(), primary_key=True),
+        sa.Column("intake_id",           sa.String(), sa.ForeignKey("lead_intakes.id"), unique=True, nullable=False),
+        sa.Column("score_value",         sa.Float()),
+        sa.Column("score_label",         sa.String(50)),
+        sa.Column("recommended_product", sa.String(255)),
+        sa.Column("readiness_score",     sa.Integer()),
+        sa.Column("summary",             sa.Text()),
+        sa.Column("questions_for_call",  sa.JSON()),
+        sa.Column("recommended_cta",     sa.String(500)),
+        sa.Column("compliance_response", sa.Text()),
+        sa.Column("scored_at",           sa.DateTime(), nullable=False),
+        sa.Column("scored_by",           sa.String(50), default="ai"),
+    )
+
+    # ── campaigns ────────────────────────────────────────────────────────────
+    op.create_table("campaigns",
+        sa.Column("id",               sa.String(), primary_key=True),
+        sa.Column("name",             sa.String(255), nullable=False),
+        sa.Column("campaign_type",    sa.String(50)),
+        sa.Column("goal",             sa.String(50)),
+        sa.Column("status",           sa.String(50), default="draft"),
+        sa.Column("channel",          sa.String(50), default="email"),
+        sa.Column("target_segment",   sa.String(255)),
+        sa.Column("product_id",       sa.String()),
+        sa.Column("voice_tone",       sa.String(100)),
+        sa.Column("sequence_length",  sa.Integer(), default=3),
+        sa.Column("follow_up_days",   sa.Integer(), default=3),
+        sa.Column("requires_approval",sa.Boolean(), default=True),
+        sa.Column("compliance_notes", sa.Text()),
+        sa.Column("contact_ids",      sa.JSON()),
+        sa.Column("created_by",       sa.String()),
+        sa.Column("created_at",       sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("message_templates",
+        sa.Column("id",                  sa.String(), primary_key=True),
+        sa.Column("name",                sa.String(255)),
+        sa.Column("channel",             sa.String(50)),
+        sa.Column("subject",             sa.String(500)),
+        sa.Column("body",                sa.Text()),
+        sa.Column("cta",                 sa.String(500)),
+        sa.Column("compliance_reviewed", sa.Boolean(), default=False),
+        sa.Column("created_by",          sa.String()),
+        sa.Column("created_at",          sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("campaign_steps",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("campaign_id", sa.String(), sa.ForeignKey("campaigns.id")),
+        sa.Column("step_order",  sa.Integer()),
+        sa.Column("name",        sa.String(255)),
+        sa.Column("channel",     sa.String(50)),
+        sa.Column("template_id", sa.String(), sa.ForeignKey("message_templates.id")),
+        sa.Column("delay_days",  sa.Integer(), default=0),
+        sa.Column("is_approved", sa.Boolean(), default=False),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    op.create_table("messages",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("campaign_id", sa.String(), sa.ForeignKey("campaigns.id")),
+        sa.Column("contact_id",  sa.String()),
+        sa.Column("channel",     sa.String(50)),
+        sa.Column("status",      sa.String(50)),
+        sa.Column("sent_at",     sa.DateTime()),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    # ── content ──────────────────────────────────────────────────────────────
+    op.create_table("social_posts",
+        sa.Column("id",              sa.String(), primary_key=True),
+        sa.Column("platform",        sa.String(50)),
+        sa.Column("category",        sa.String(50)),
+        sa.Column("hook",            sa.Text()),
+        sa.Column("body",            sa.Text()),
+        sa.Column("cta",             sa.Text()),
+        sa.Column("caption",         sa.Text()),
+        sa.Column("hashtags",        sa.JSON()),
+        sa.Column("approval_status", sa.String(50)),
+        sa.Column("pipeline_stage",  sa.String(50), default="script_only"),
+        sa.Column("scheduled_at",    sa.DateTime()),
+        sa.Column("published_at",    sa.DateTime()),
+        sa.Column("created_by",      sa.String()),
+        sa.Column("created_at",      sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("media_assets",
+        sa.Column("id",            sa.String(), primary_key=True),
+        sa.Column("post_id",       sa.String(), sa.ForeignKey("social_posts.id")),
+        sa.Column("asset_type",    sa.String(50)),
+        sa.Column("file_path",     sa.String(500)),
+        sa.Column("url",           sa.String(500)),
+        sa.Column("duration_secs", sa.Float()),
+        sa.Column("pipeline_stage",sa.String(50)),
+        sa.Column("provider",      sa.String(100)),
+        sa.Column("provider_job_id",sa.String(255)),
+        sa.Column("created_at",    sa.DateTime()),
+    )
+
+    # ── agent ────────────────────────────────────────────────────────────────
+    op.create_table("agent_runs",
+        sa.Column("id",         sa.String(), primary_key=True),
+        sa.Column("run_type",   sa.String(100)),
+        sa.Column("status",     sa.String(50)),
+        sa.Column("started_at", sa.DateTime()),
+        sa.Column("ended_at",   sa.DateTime()),
+        sa.Column("summary",    sa.Text()),
+        sa.Column("error",      sa.Text()),
+        sa.Column("metadata",   sa.JSON()),
+        sa.Column("created_at", sa.DateTime()),
+    )
+
+    op.create_table("agent_actions",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("run_id",      sa.String(), sa.ForeignKey("agent_runs.id")),
+        sa.Column("action_type", sa.String(100)),
+        sa.Column("description", sa.Text()),
+        sa.Column("input_data",  sa.JSON()),
+        sa.Column("output_data", sa.JSON()),
+        sa.Column("status",      sa.String(50)),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    op.create_table("approval_queue",
+        sa.Column("id",               sa.String(), primary_key=True),
+        sa.Column("item_type",        sa.String(100)),
+        sa.Column("item_id",          sa.String()),
+        sa.Column("title",            sa.String(500)),
+        sa.Column("preview",          sa.Text()),
+        sa.Column("status",           sa.String(50), default="pending"),
+        sa.Column("priority",         sa.Integer(), default=5),
+        sa.Column("rejection_reason", sa.Text()),
+        sa.Column("created_by",       sa.String()),
+        sa.Column("reviewed_by",      sa.String()),
+        sa.Column("reviewed_at",      sa.DateTime()),
+        sa.Column("created_at",       sa.DateTime()),
+    )
+
+    op.create_table("tasks",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("task_type",   sa.String(100)),
+        sa.Column("title",       sa.String(500)),
+        sa.Column("description", sa.Text()),
+        sa.Column("status",      sa.String(50), default="pending"),
+        sa.Column("priority",    sa.Integer(), default=5),
+        sa.Column("payload",     sa.JSON()),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    # ── compliance ───────────────────────────────────────────────────────────
+    op.create_table("compliance_flags",
+        sa.Column("id",           sa.String(), primary_key=True),
+        sa.Column("resource_type",sa.String(100)),
+        sa.Column("resource_id",  sa.String()),
+        sa.Column("flag_type",    sa.String(100)),
+        sa.Column("severity",     sa.String(50)),
+        sa.Column("description",  sa.Text()),
+        sa.Column("resolved",     sa.Boolean(), default=False),
+        sa.Column("created_at",   sa.DateTime()),
+    )
+
+    op.create_table("audit_logs",
+        sa.Column("id",           sa.String(), primary_key=True),
+        sa.Column("event_type",   sa.String(100)),
+        sa.Column("actor_type",   sa.String(50)),
+        sa.Column("actor_id",     sa.String()),
+        sa.Column("resource_type",sa.String(100)),
+        sa.Column("resource_id",  sa.String()),
+        sa.Column("ip_address",   sa.String(50)),
+        sa.Column("details",      sa.JSON()),
+        sa.Column("created_at",   sa.DateTime()),
+    )
+
+    # ── hub ──────────────────────────────────────────────────────────────────
+    op.create_table("rate_snapshots",
+        sa.Column("id",                   sa.String(), primary_key=True),
+        sa.Column("rate_conventional_30", sa.Float()),
+        sa.Column("rate_conventional_15", sa.Float()),
+        sa.Column("rate_fha_30",          sa.Float()),
+        sa.Column("rate_va_30",           sa.Float()),
+        sa.Column("rate_jumbo_30",        sa.Float()),
+        sa.Column("rate_dscr",            sa.Float()),
+        sa.Column("rate_heloc",           sa.Float()),
+        sa.Column("rate_arm_5_1",         sa.Float()),
+        sa.Column("source",               sa.String(100)),
+        sa.Column("notes",                sa.Text()),
+        sa.Column("created_by",           sa.String()),
+        sa.Column("created_at",           sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("listings",
+        sa.Column("id",            sa.String(), primary_key=True),
+        sa.Column("address",       sa.String(500)),
+        sa.Column("city",          sa.String(100)),
+        sa.Column("state",         sa.String(50)),
+        sa.Column("zip_code",      sa.String(20)),
+        sa.Column("price",         sa.Float()),
+        sa.Column("bedrooms",      sa.Integer()),
+        sa.Column("bathrooms",     sa.Float()),
+        sa.Column("sqft",          sa.Integer()),
+        sa.Column("status",        sa.String(50)),
+        sa.Column("is_featured",   sa.Boolean(), default=False),
+        sa.Column("mls_number",    sa.String(50)),
+        sa.Column("description",   sa.Text()),
+        sa.Column("images",        sa.JSON()),
+        sa.Column("created_at",    sa.DateTime()),
+    )
+
+    op.create_table("dpa_programs",
+        sa.Column("id",               sa.String(), primary_key=True),
+        sa.Column("program_name",     sa.String(500), nullable=False),
+        sa.Column("dpa_type",         sa.String(50)),
+        sa.Column("state",            sa.String(50)),
+        sa.Column("county",           sa.String(100)),
+        sa.Column("assistance_amount",sa.String(255)),
+        sa.Column("max_income",       sa.Float()),
+        sa.Column("min_credit",       sa.Integer()),
+        sa.Column("requirements",     sa.Text()),
+        sa.Column("is_active",        sa.Boolean(), default=True),
+        sa.Column("is_featured",      sa.Boolean(), default=False),
+        sa.Column("created_at",       sa.DateTime()),
+        sa.Column("updated_at",       sa.DateTime()),
+    )
+
+    op.create_table("rate_alerts",
+        sa.Column("id",                   sa.String(), primary_key=True),
+        sa.Column("name",                 sa.String(255), nullable=False),
+        sa.Column("rate_field",           sa.String(100), nullable=False),
+        sa.Column("threshold",            sa.Float(), nullable=False),
+        sa.Column("direction",            sa.String(10), nullable=False),
+        sa.Column("action",               sa.String(50), default="log"),
+        sa.Column("message",              sa.String(500)),
+        sa.Column("is_active",            sa.Boolean(), default=True),
+        sa.Column("last_triggered_at",    sa.DateTime()),
+        sa.Column("last_triggered_rate",  sa.Float()),
+        sa.Column("created_by",           sa.String()),
+        sa.Column("created_at",           sa.DateTime(), nullable=False),
+    )
+
+    op.create_table("rate_alerts_contacts",
+        sa.Column("id",         sa.String(), primary_key=True),
+        sa.Column("alert_id",   sa.String(), sa.ForeignKey("rate_alerts.id")),
+        sa.Column("contact_id", sa.String(), sa.ForeignKey("contacts.id")),
+    )
+
+    # ── script_templates ─────────────────────────────────────────────────────
+    op.create_table("script_templates",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("name",        sa.String(255), nullable=False),
+        sa.Column("scenario",    sa.String(100)),
+        sa.Column("content",     sa.Text()),
+        sa.Column("created_by",  sa.String()),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    # ── outreach engine ───────────────────────────────────────────────────────
+    op.create_table("prospect_lists",
+        sa.Column("id",                sa.String(), primary_key=True),
+        sa.Column("name",              sa.String(255), nullable=False),
+        sa.Column("description",       sa.Text()),
+        sa.Column("source",            sa.String(50)),
+        sa.Column("prospect_type",     sa.String(50)),
+        sa.Column("state",             sa.String(50)),
+        sa.Column("county",            sa.String(100)),
+        sa.Column("zip_codes",         sa.JSON()),
+        sa.Column("total_records",     sa.Integer(), default=0),
+        sa.Column("scored_count",      sa.Integer(), default=0),
+        sa.Column("a_target_count",    sa.Integer(), default=0),
+        sa.Column("b_target_count",    sa.Integer(), default=0),
+        sa.Column("suppressed_count",  sa.Integer(), default=0),
+        sa.Column("source_file_name",  sa.String(500)),
+        sa.Column("created_by",        sa.String()),
+        sa.Column("created_at",        sa.DateTime()),
+        sa.Column("updated_at",        sa.DateTime()),
+    )
+
+    op.create_table("prospects",
+        sa.Column("id",                     sa.String(), primary_key=True),
+        sa.Column("prospect_list_id",       sa.String(), sa.ForeignKey("prospect_lists.id")),
+        sa.Column("prospect_type",          sa.String(50)),
+        sa.Column("first_name",             sa.String(100)),
+        sa.Column("last_name",              sa.String(100)),
+        sa.Column("full_name",              sa.String(255)),
+        sa.Column("email",                  sa.String(255)),
+        sa.Column("phone",                  sa.String(30)),
+        sa.Column("mailing_address",        sa.String(500)),
+        sa.Column("mailing_city",           sa.String(100)),
+        sa.Column("mailing_state",          sa.String(50)),
+        sa.Column("mailing_zip",            sa.String(20)),
+        sa.Column("property_address",       sa.String(500)),
+        sa.Column("property_city",          sa.String(100)),
+        sa.Column("property_state",         sa.String(50)),
+        sa.Column("property_zip",           sa.String(20)),
+        sa.Column("property_county",        sa.String(100)),
+        sa.Column("is_owner_occupied",      sa.Boolean()),
+        sa.Column("is_investment_property", sa.Boolean()),
+        sa.Column("purchase_price",         sa.Float()),
+        sa.Column("purchase_date",          sa.String(50)),
+        sa.Column("estimated_current_value",sa.Float()),
+        sa.Column("estimated_equity_pct",   sa.Float()),
+        sa.Column("estimated_equity_dollars",sa.Float()),
+        sa.Column("current_loan_amount",    sa.Float()),
+        sa.Column("current_rate_estimate",  sa.Float()),
+        sa.Column("loan_type",              sa.String(100)),
+        sa.Column("origination_date",       sa.String(50)),
+        sa.Column("last_refi_date",         sa.String(50)),
+        sa.Column("lender_name",            sa.String(255)),
+        sa.Column("company_name",           sa.String(255)),
+        sa.Column("license_number",         sa.String(100)),
+        sa.Column("is_do_not_contact",      sa.Boolean(), default=False),
+        sa.Column("is_suppressed",          sa.Boolean(), default=False),
+        sa.Column("raw_data",               sa.JSON()),
+        sa.Column("created_at",             sa.DateTime()),
+    )
+
+    op.create_table("refi_scores",
+        sa.Column("id",                   sa.String(), primary_key=True),
+        sa.Column("prospect_id",          sa.String(), sa.ForeignKey("prospects.id")),
+        sa.Column("score",                sa.Integer()),
+        sa.Column("grade",                sa.String(20)),
+        sa.Column("reason_codes",         sa.JSON()),
+        sa.Column("recommended_channel",  sa.String(50)),
+        sa.Column("recommended_template", sa.String(100)),
+        sa.Column("score_details",        sa.JSON()),
+        sa.Column("scored_at",            sa.DateTime()),
+    )
+
+    op.create_table("campaign_outreaches",
+        sa.Column("id",                sa.String(), primary_key=True),
+        sa.Column("campaign_id",       sa.String()),
+        sa.Column("prospect_id",       sa.String(), sa.ForeignKey("prospects.id")),
+        sa.Column("channel",           sa.String(50)),
+        sa.Column("template_key",      sa.String(100)),
+        sa.Column("template_name",     sa.String(255)),
+        sa.Column("subject",           sa.String(500)),
+        sa.Column("body_text",         sa.Text()),
+        sa.Column("body_html",         sa.Text()),
+        sa.Column("call_script",       sa.Text()),
+        sa.Column("merge_data",        sa.JSON()),
+        sa.Column("qr_code",           sa.String(20)),
+        sa.Column("tracking_url",      sa.String(500)),
+        sa.Column("status",            sa.String(50), default="draft"),
+        sa.Column("compliance_status", sa.String(50)),
+        sa.Column("compliance_flags",  sa.JSON()),
+        sa.Column("approval_status",   sa.String(50)),
+        sa.Column("approved_by",       sa.String()),
+        sa.Column("approved_at",       sa.DateTime()),
+        sa.Column("rejection_reason",  sa.Text()),
+        sa.Column("provider",          sa.String(100)),
+        sa.Column("provider_job_id",   sa.String(255)),
+        sa.Column("provider_message_id",sa.String(255)),
+        sa.Column("failed_reason",     sa.Text()),
+        sa.Column("sent_at",           sa.DateTime()),
+        sa.Column("delivered_at",      sa.DateTime()),
+        sa.Column("opened_at",         sa.DateTime()),
+        sa.Column("clicked_at",        sa.DateTime()),
+        sa.Column("bounced_at",        sa.DateTime()),
+        sa.Column("unsubscribed_at",   sa.DateTime()),
+        sa.Column("qr_scanned_at",     sa.DateTime()),
+        sa.Column("created_at",        sa.DateTime()),
+    )
+
+    op.create_table("qr_links",
+        sa.Column("id",              sa.String(), primary_key=True),
+        sa.Column("code",            sa.String(20), unique=True, nullable=False, index=True),
+        sa.Column("label",           sa.String(255)),
+        sa.Column("outreach_id",     sa.String()),
+        sa.Column("campaign_id",     sa.String()),
+        sa.Column("prospect_id",     sa.String()),
+        sa.Column("destination_url", sa.String(2000), nullable=False),
+        sa.Column("scan_count",      sa.Integer(), default=0),
+        sa.Column("click_count",     sa.Integer(), default=0),
+        sa.Column("last_scanned_at", sa.DateTime()),
+        sa.Column("is_active",       sa.Boolean(), default=True),
+        sa.Column("expires_at",      sa.DateTime()),
+        sa.Column("created_at",      sa.DateTime()),
+    )
+
+    op.create_table("qr_events",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("qr_link_id",  sa.String(), sa.ForeignKey("qr_links.id")),
+        sa.Column("outreach_id", sa.String()),
+        sa.Column("event_type",  sa.String(50)),
+        sa.Column("ip_address",  sa.String(50)),
+        sa.Column("user_agent",  sa.String(500)),
+        sa.Column("referrer",    sa.String(500)),
+        sa.Column("metadata",    sa.JSON()),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+    op.create_table("call_tasks",
+        sa.Column("id",                   sa.String(), primary_key=True),
+        sa.Column("outreach_id",          sa.String()),
+        sa.Column("campaign_id",          sa.String()),
+        sa.Column("prospect_id",          sa.String()),
+        sa.Column("prospect_name",        sa.String(255)),
+        sa.Column("phone",                sa.String(30)),
+        sa.Column("property_address",     sa.String(500)),
+        sa.Column("trigger",              sa.String(100)),
+        sa.Column("trigger_detail",       sa.Text()),
+        sa.Column("call_script",          sa.Text()),
+        sa.Column("talking_points",       sa.JSON()),
+        sa.Column("campaign_context",     sa.String(255)),
+        sa.Column("priority",             sa.Integer(), default=5),
+        sa.Column("score",                sa.Integer()),
+        sa.Column("status",               sa.String(50), default="pending"),
+        sa.Column("notes",                sa.Text()),
+        sa.Column("outcome_detail",       sa.Text()),
+        sa.Column("callback_scheduled_at",sa.DateTime()),
+        sa.Column("completed_at",         sa.DateTime()),
+        sa.Column("created_at",           sa.DateTime()),
+    )
+
+    op.create_table("suppression_entries",
+        sa.Column("id",         sa.String(), primary_key=True),
+        sa.Column("value",      sa.String(500), unique=True, nullable=False),
+        sa.Column("value_type", sa.String(50)),
+        sa.Column("reason",     sa.String(100)),
+        sa.Column("source",     sa.String(100)),
+        sa.Column("notes",      sa.Text()),
+        sa.Column("added_at",   sa.DateTime()),
+    )
+
+    op.create_table("provider_configs",
+        sa.Column("id",           sa.String(), primary_key=True),
+        sa.Column("channel",      sa.String(50)),
+        sa.Column("provider_name",sa.String(100)),
+        sa.Column("is_active",    sa.Boolean(), default=True),
+        sa.Column("config_json",  sa.JSON()),
+        sa.Column("created_at",   sa.DateTime()),
+    )
+
+    op.create_table("mail_templates",
+        sa.Column("id",          sa.String(), primary_key=True),
+        sa.Column("key",         sa.String(100), unique=True, nullable=False),
+        sa.Column("name",        sa.String(255)),
+        sa.Column("html",        sa.Text()),
+        sa.Column("created_at",  sa.DateTime()),
+    )
+
+
+def downgrade() -> None:
+    # Drop in reverse dependency order
+    for table in [
+        "mail_templates", "provider_configs", "suppression_entries", "call_tasks",
+        "qr_events", "qr_links", "campaign_outreaches", "refi_scores", "prospects",
+        "prospect_lists", "script_templates", "rate_alerts_contacts", "rate_alerts",
+        "dpa_programs", "listings", "rate_snapshots", "audit_logs", "compliance_flags",
+        "tasks", "approval_queue", "agent_actions", "agent_runs",
+        "media_assets", "social_posts", "messages", "campaign_steps",
+        "message_templates", "campaigns", "lead_scores", "lead_intakes",
+        "opt_outs", "consent_records", "lead_scores", "contacts",
+        "product_disclaimers", "products", "users",
+    ]:
+        op.drop_table(table)

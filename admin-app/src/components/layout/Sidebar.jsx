@@ -3,18 +3,26 @@ import { useAuth } from '../../hooks/useAuth'
 import {
   LayoutDashboard, Users, FileText, Megaphone,
   Package, Sparkles, CheckSquare, Bot,
-  Settings, LogOut, Bell,
+  Settings, LogOut, Bell, TrendingUp, Home as HomeIcon, BadgeDollarSign,
+  Send, PhoneCall, BarChart3, QrCode,
 } from 'lucide-react'
 
 const NAV = [
-  { path: '/dashboard',  label: 'Dashboard',      icon: LayoutDashboard },
-  { path: '/leads',      label: 'Leads',          icon: Bell },
-  { path: '/contacts',   label: 'Contacts',       icon: Users },
-  { path: '/campaigns',  label: 'Campaigns',      icon: Megaphone },
-  { path: '/products',   label: 'Products',       icon: Package },
-  { path: '/content',    label: 'Content Studio', icon: Sparkles },
-  { path: '/approvals',  label: 'Approvals',      icon: CheckSquare },
-  { path: '/agent',      label: 'Agent Logs',     icon: Bot },
+  { path: '/dashboard',    label: 'Dashboard',      icon: LayoutDashboard },
+  { path: '/leads',        label: 'Leads',          icon: Bell },
+  { path: '/call-queue',   label: 'Call Queue',     icon: PhoneCall },
+  { path: '/outreach',     label: 'Outreach',       icon: Send },
+  { path: '/analytics',   label: 'Performance',    icon: BarChart3 },
+  { path: '/rates',        label: 'Rate Snapshot',  icon: TrendingUp },
+  { path: '/hub-listings', label: 'Listings',       icon: HomeIcon },
+  { path: '/dpa-programs', label: 'DPA Programs',   icon: BadgeDollarSign },
+  { path: '/contacts',     label: 'Contacts',       icon: Users },
+  { path: '/campaigns',    label: 'Campaigns',      icon: Megaphone },
+  { path: '/products',     label: 'Products',       icon: Package },
+  { path: '/content',      label: 'Content Studio', icon: Sparkles },
+  { path: '/approvals',    label: 'Approvals',      icon: CheckSquare },
+  { path: '/qr-codes',     label: 'QR Codes',       icon: QrCode },
+  { path: '/agent',        label: 'Agent Logs',     icon: Bot },
 ]
 
 export default function Sidebar() {

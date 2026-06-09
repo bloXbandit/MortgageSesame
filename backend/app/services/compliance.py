@@ -8,6 +8,7 @@ Never blocks user-initiated review — always surfaces flags as warnings or bloc
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Optional
 
 
 class Severity(str, Enum):
@@ -21,7 +22,7 @@ class Severity(str, Enum):
 class ComplianceResult:
     passed: bool
     flags: list[dict] = field(default_factory=list)
-    sanitized_text: str | None = None
+    sanitized_text: Optional[str] = None
 
     def add_flag(self, rule: str, snippet: str, severity: Severity, suggestion: str = ""):
         self.flags.append({

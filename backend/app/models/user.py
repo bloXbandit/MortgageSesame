@@ -4,6 +4,7 @@ from sqlalchemy import String, Boolean, DateTime, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 import enum
+from typing import Optional
 
 
 class UserRole(str, enum.Enum):
@@ -23,11 +24,11 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.BANKER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    phone: Mapped[str | None] = mapped_column(String(30))
-    nmls_id: Mapped[str | None] = mapped_column(String(50))
-    company_name: Mapped[str | None] = mapped_column(String(255))
-    brand_voice: Mapped[str | None] = mapped_column(String(2000))
-    calendly_link: Mapped[str | None] = mapped_column(String(500))
+    phone: Mapped[Optional[str]] = mapped_column(String(30))
+    nmls_id: Mapped[Optional[str]] = mapped_column(String(50))
+    company_name: Mapped[Optional[str]] = mapped_column(String(255))
+    brand_voice: Mapped[Optional[str]] = mapped_column(String(2000))
+    calcom_link: Mapped[Optional[str]] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_login: Mapped[datetime | None] = mapped_column(DateTime)
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime)

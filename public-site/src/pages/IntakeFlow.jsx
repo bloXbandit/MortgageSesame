@@ -1,8 +1,9 @@
+import { CALCOM, APP_1003, BANKER_NMLS, SERVICE_STATES } from '../config'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRight, ArrowLeft, Shield, CheckCircle } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || '/api/v1'
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api/v1'
 
 const LOAN_TYPES = [
   { value: 'purchase', label: '🏠 Buy a Home', sub: 'FHA, conventional, VA, USDA' },
@@ -191,7 +192,7 @@ export default function IntakeFlow() {
         <p style={{ marginTop: '24px', fontSize: '0.7rem', color: '#555', lineHeight: 1.5, maxWidth: '420px' }}>
           For educational purposes only. Not a commitment to lend. All loans subject to credit approval,
           income verification, and underwriting. Results may vary. Equal Housing Opportunity.
-          NMLS# [YOUR_NMLS].
+          NMLS# {BANKER_NMLS}.
         </p>
       </div>
     </div>
@@ -442,7 +443,7 @@ function StepConsent({ form, set }) {
         We will never sell your information. Opt out any time by replying STOP (SMS),
         clicking unsubscribe (email), or calling us. Your data is handled per our Privacy Policy.
         This is not a credit application. Not a commitment to lend. All loans subject to approval.
-        NMLS# [YOUR_NMLS] · Equal Housing Opportunity Lender.
+        NMLS# {BANKER_NMLS} · Equal Housing Opportunity Lender.
       </p>
     </div>
   )
