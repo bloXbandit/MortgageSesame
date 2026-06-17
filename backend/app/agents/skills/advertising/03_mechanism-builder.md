@@ -11,7 +11,7 @@ With a clear mechanism, they think: "Oh — that's different. That might actuall
 
 ---
 
-## KEVIN'S MECHANISM STACK
+## KENNETH'S MECHANISM STACK
 
 These are the specific, real, verifiable advantages Kenneth has.
 Use them as proof pillars inside ads, sales letters, and scripts.
@@ -104,20 +104,44 @@ Kenneth problem-solves.
 
 ---
 
-### MECHANISM 6 — ZILLOW 5-STAR RATING
-**What it is:** Verified 5-star rating on Zillow from real clients.
+### MECHANISM 6 — ZILLOW 5-STAR RATING + REAL CLIENT TESTIMONIALS
+**What it is:** Verified 5-star rating on Zillow from real clients. 8 reviews, all 5 stars.
 URL: https://www.zillow.com/lender-profile/kmanjo2/
 
 **Why it matters:**
 Third-party proof is more powerful than self-promotion.
 In a market full of "trust me" messaging, a verified public rating is a pattern interrupt.
 
+**REAL CLIENT QUOTES — use these verbatim in copy (do not paraphrase or invent):**
+
+> "10/10 experience. Kenneth worked so hard to make this experience great for me. Created a great plan based off my situation and we executed! I can't express how thankful I am for having him through this process!"
+> — First-time buyer, Laurel MD · Closed Nov 2024 · Interest rate lower than expected · Closing costs lower than expected
+
+> "Kenny Manjo was GREAT!! Kenny was professional, timely, and educated about all of our loan needs. Kenny maintained a great line of communication with us throughout the process, answering all of our questions (we had a lot) regardless of the time of day! In an ever changing and competitive market, Kenny utilized creative financing."
+> — Buyer, Bowie MD · Closed Dec 2023 · Conventional · Interest rate lower than expected · Closing costs lower than expected
+
+> "Kenny was thorough, and very responsive to any question or concerns I had. He is very knowledgeable at his craft and showed immaculate professionalism. I would definitely recommend him again."
+> — legitlivings LLC, Bowie MD · Closed Aug 2023 · Conventional
+
+> "Kenneth was incredibly helpful throughout this whole process. He answered every question in a timely manner and made sure that we were aware of what was going on every step of the way. Kenneth and his team went above and beyond to make our first time buying a home seem [easy]."
+> — First-time buyer, Glen Burnie MD · FHA Loan · Interest rate lower than expected · Closing costs lower than expected
+
+**Key proof patterns pulled from these reviews (use in copy):**
+- "Created a great plan based off my situation" → personalized, not cookie-cutter
+- "Answering all of our questions regardless of the time of day" → available, responsive
+- "Creative financing" → finds solutions others don't
+- "Went above and beyond" → overdelivers
+- Interest rate AND closing costs came in lower than expected on multiple closings
+- First-time buyers + conventional buyers + investors all reviewed positively
+
 **How to say it in copy:**
 - "5-star Zillow rating. Real clients. Real closings. See for yourself."
 - "Don't take my word for it — check my Zillow."
-- "[Star emoji ×5] — that's the track record. Now let me earn yours."
+- "⭐⭐⭐⭐⭐ — 'Kenny Manjo was GREAT!! ...answered all of our questions regardless of the time of day.' — Bowie MD buyer"
+- "'Created a great plan based off my situation and we executed.' — that's what working with me looks like."
+- "Interest rate AND closing costs came in lower than expected. That's not luck — that's wholesale access."
 
-**Pairing:** Stage 4 awareness (product aware, comparing). Realtor outreach (reputational proof).
+**Pairing:** Stage 4 awareness (product aware, comparing). Realtor outreach (reputational proof). Any avatar where trust is the barrier.
 
 ---
 

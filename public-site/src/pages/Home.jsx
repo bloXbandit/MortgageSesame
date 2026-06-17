@@ -1,4 +1,4 @@
-import { CALCOM, APP_1003, BANKER_NMLS, SERVICE_STATES } from '../config'
+import { CALCOM, APP_1003, BANKER_NMLS, SERVICE_STATES, VIDEO_CONSUMER, VIDEO_REALTOR } from '../config'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import RateTicker from '../components/RateTicker'
@@ -426,6 +426,69 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── Intro Videos ─────────────────────────────────────────────────── */}
+      {(VIDEO_CONSUMER || VIDEO_REALTOR) && (
+        <section style={{ padding: '72px 24px', background: '#fff' }}>
+          <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: 48 }}>
+              <div style={{ fontSize: '0.68rem', color: '#b85c00', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: 8 }}>
+                See How It Works
+              </div>
+              <h2 style={{ margin: '0 0 10px', fontSize: 'clamp(1.5rem, 3vw, 2.2rem)', fontWeight: 800, color: '#1f1f1f' }}>
+                Meet MortgageSesame
+              </h2>
+              <p style={{ margin: 0, color: '#666', fontSize: '0.9375rem', maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
+                A quick look at how we help buyers get to closing — and how realtors win with a lender who actually closes fast.
+              </p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 32 }}>
+              {VIDEO_CONSUMER && (
+                <div>
+                  <div style={{
+                    position: 'relative', paddingTop: '56.25%',
+                    background: '#1f1f1f', borderRadius: 12, overflow: 'hidden',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                  }}>
+                    <video
+                      src={VIDEO_CONSUMER}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 16, textAlign: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1f1f1f', marginBottom: 4 }}>For Homebuyers</div>
+                    <div style={{ fontSize: '0.8125rem', color: '#888' }}>How MortgageSesame gets you to the closing table</div>
+                  </div>
+                </div>
+              )}
+              {VIDEO_REALTOR && (
+                <div>
+                  <div style={{
+                    position: 'relative', paddingTop: '56.25%',
+                    background: '#1f1f1f', borderRadius: 12, overflow: 'hidden',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                  }}>
+                    <video
+                      src={VIDEO_REALTOR}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 16, textAlign: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1f1f1f', marginBottom: 4 }}>For Realtors</div>
+                    <div style={{ fontSize: '0.8125rem', color: '#888' }}>Why top agents partner with Kenneth Manjo</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Final CTA ────────────────────────────────────────────────────── */}
       <section style={{ padding: '72px 24px', background: '#1a1a1a', textAlign: 'center' }}>

@@ -23,14 +23,14 @@ GRAPH = "https://graph.facebook.com/v19.0"
 class FacebookPublisher(PlatformPublisher):
 
     def __init__(self):
-        self.token   = os.getenv("META_ACCESS_TOKEN", "")
-        self.page_id = os.getenv("META_PAGE_ID", "")
+        self.token   = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
+        self.page_id = os.getenv("FACEBOOK_PAGE_ID", "")
 
     async def publish(self, payload: PublishPayload) -> PublishResult:
         if not self.token or not self.page_id:
             return PublishResult(
                 success=False,
-                error="META_ACCESS_TOKEN and META_PAGE_ID required for Facebook posting",
+                error="FACEBOOK_PAGE_ACCESS_TOKEN and FACEBOOK_PAGE_ID required for Facebook posting",
             )
 
         caption = payload.caption or ""

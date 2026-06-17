@@ -187,7 +187,21 @@ export default function AdminListings() {
               <Field label="Sq Ft" value={form.sqft} onChange={v => set('sqft', v)} type="number" />
               <Field label="Property Type" value={form.property_type} onChange={v => set('property_type', v)} placeholder="single family, condo…" />
               <Field label="Annual Taxes ($)" value={form.annual_taxes} onChange={v => set('annual_taxes', v)} type="number" />
-              <Field label="Annual Insurance ($)" value={form.annual_insurance} onChange={v => set('annual_insurance', v)} type="number" />
+              <div>
+                <Field label="Annual Homeowners Insurance ($)" value={form.annual_insurance} onChange={v => set('annual_insurance', v)} type="number" />
+                <p style={{ margin: '3px 0 0', fontSize: '0.7rem', color: '#666' }}>
+                  Hazard/property insurance only. Leave blank to estimate.
+                </p>
+              </div>
+              <div>
+                <label style={labelStyle}>PMI / MIP</label>
+                <div style={{ padding: '9px 12px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6, fontSize: '0.8rem', color: '#666' }}>
+                  Auto-calculated per loan type
+                </div>
+                <p style={{ margin: '3px 0 0', fontSize: '0.7rem', color: '#666' }}>
+                  FHA: 0.55% annual MIP · Conv: ~0.70% PMI (drops at 20% equity)
+                </p>
+              </div>
               <Field label="HOA Monthly ($)" value={form.hoa_monthly} onChange={v => set('hoa_monthly', v)} type="number" />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>

@@ -665,42 +665,71 @@ async def voice_generate(data: VoiceGenerateRequest, db: AsyncSession = Depends(
     }
 
 
+# ── GET /agent/campaign-templates ──────────────────────────────────────────
+@router.get("/campaign-templates")
+async def get_campaign_templates():
+    """
+    Returns all pre-built plug-and-play campaign scenarios.
+    Agent uses this to show the operator what's available and launch any scenario
+    with a single build-campaign call using template_id.
+    """
+    from app.services.ad_campaign_builder import CAMPAIGN_TEMPLATES
+    return {
+        "templates": list(CAMPAIGN_TEMPLATES.values()),
+        "count": len(CAMPAIGN_TEMPLATES),
+        "note": "Pass template_id to /agent/build-campaign to launch any scenario. "
+                "avatar/product/market/budget_hint from the template are used as defaults "
+                "and can be overridden in the same request.",
+    }
+
+
 # ── POST /agent/build-campaign ─────────────────────────────────────────────
 class BuildCampaignRequest(BaseModel):
     """
     Trigger the full 9-step advertising skill chain.
-    Clawdbot / Hermes calls this endpoint to build a complete ad campaign.
 
-    avatar options:    declined_buyer | first_timer | equity_prisoner | realtor_client
-    product options:   fha | va | dpa | conventional | heloc | dscr | refi
-    market options:    MD | DC | both
-    budget_hint:       low | mid | scale
-    proof:             (optional) A real result to include as proof — e.g. "Closed $390k FHA in 9 days"
-    flyer_id:          (optional) ID of a completed GeneratedFlyer to use as the visual creative
+    template_id:          (optional) Pre-built scenario slug — auto-fills avatar/product/market/budget_hint.
+                          Get available templates from GET /agent/campaign-templates.
+    avatar:               declined_buyer | first_timer | equity_prisoner | realtor_client
+    product:              fha | va | dpa | conventional | heloc | dscr | refi
+    market:               MD | DC | both
+    budget_hint:          low | mid | scale
+    proof:                (optional) Real result to weave in — e.g. "Closed $390k FHA in 9 days"
+    flyer_id:             (optional) ID of a completed GeneratedFlyer to use as visual creative
+    reference_page_slug:  (optional) Existing CampaignPage slug — pulls headline/proof and uses
+                          as inspiration context so the new campaign builds on proven copy.
     """
-    avatar: str
-    product: str
+    template_id: Optional[str] = None
+    avatar: Optional[str] = None
+    product: Optional[str] = None
     proof: Optional[str] = None
     market: str = "MD"
     budget_hint: str = "low"
     flyer_id: Optional[int] = None
+    reference_page_slug: Optional[str] = None
 
 
 @router.post("/build-campaign")
 async def build_campaign(data: BuildCampaignRequest, db: AsyncSession = Depends(get_db)):
     """
     Run the full advertising skill chain:
-    Avatar → Offer → Awareness → Mechanism → Angles → Creative → Sales Letter → Objections → QA
+    Avatar → Offer → Awareness → Mechanism → Angles → Creative → Sales Letter → Objections → QA + Facebook Setup
 
-    Returns 3 ad units + sales letter + 3-email sequence.
+    Returns 3 ad units + sales letter + 3-email sequence + Facebook ad setup block.
     All assets route to the Approval Queue — nothing goes live without human review.
 
-    Pass flyer_id to attach a generated flyer as the campaign's visual creative.
-    The AI writes copy that references the image; it's embedded in the email sequence.
+    Use template_id for plug-and-play scenarios. Use reference_page_slug to build
+    on an existing sales letter. Use flyer_id to attach a branded visual.
     """
-    from app.services.ad_campaign_builder import build_ad_campaign
+    from app.services.ad_campaign_builder import build_ad_campaign, CAMPAIGN_TEMPLATES
     from app.models.flyer import GeneratedFlyer
     from sqlalchemy import select as _select
+
+    # Require either template_id or avatar+product
+    avatar  = data.avatar  or (CAMPAIGN_TEMPLATES.get(data.template_id or "", {}).get("avatar"))
+    product = data.product or (CAMPAIGN_TEMPLATES.get(data.template_id or "", {}).get("product"))
+    if not avatar or not product:
+        raise HTTPException(status_code=422, detail="Provide template_id OR both avatar and product.")
 
     flyer_image_url = None
     if data.flyer_id:
@@ -715,16 +744,23 @@ async def build_campaign(data: BuildCampaignRequest, db: AsyncSession = Depends(
 
     result = await build_ad_campaign(
         db=db,
-        avatar=data.avatar,
-        product=data.product,
+        avatar=avatar,
+        product=product,
         proof=data.proof,
         market=data.market,
         budget_hint=data.budget_hint,
         flyer_image_url=flyer_image_url,
+        template_id=data.template_id,
+        reference_page_slug=data.reference_page_slug,
     )
 
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+
+    # Attach the Facebook targeting spec from the template if one was used
+    if data.template_id and data.template_id in CAMPAIGN_TEMPLATES:
+        result["facebook_setup"] = CAMPAIGN_TEMPLATES[data.template_id].get("facebook", {})
+        result["template_used"] = data.template_id
 
     return result
 
@@ -733,6 +769,9 @@ class FlyerToCampaignRequest(BaseModel):
     """
     Full autonomous chain: build a flyer → wait for completion → build campaign with it.
     Agent calls this when it wants to create a campaign with a fresh visual creative.
+
+    Pass template_id to use a pre-built scenario (avatar/product/market/budget auto-filled).
+    Or pass avatar + product manually. template_id takes precedence for defaults.
     """
     # Flyer params
     use_case: str = "purchase"
@@ -742,12 +781,14 @@ class FlyerToCampaignRequest(BaseModel):
     cta_text: Optional[str] = "Book a Free Call →"
     style_preset: Optional[str] = "suit_headshot"
     skip_ai: bool = False
-    # Campaign params
-    avatar: str
-    product: str
+    # Campaign params — template_id fills defaults; avatar/product override if provided
+    template_id: Optional[str] = None
+    avatar: Optional[str] = None
+    product: Optional[str] = None
     proof: Optional[str] = None
     market: str = "MD"
     budget_hint: str = "low"
+    reference_page_slug: Optional[str] = None
 
 
 @router.post("/flyer-to-campaign")
@@ -764,7 +805,7 @@ async def flyer_to_campaign(data: FlyerToCampaignRequest, db: AsyncSession = Dep
     from app.models.flyer import GeneratedFlyer, ReferencePhoto
     from app.services.avatar_generator import generate_avatar, remove_background, get_style_preset
     from app.services.flyer_builder import build_flyer_async
-    from app.services.ad_campaign_builder import build_ad_campaign
+    from app.services.ad_campaign_builder import build_ad_campaign, CAMPAIGN_TEMPLATES
 
     # ── Step 1: Flyer ─────────────────────────────────────────────────────────
     ref = (await db.execute(select(ReferencePhoto).limit(1))).scalar_one_or_none()
@@ -817,14 +858,29 @@ async def flyer_to_campaign(data: FlyerToCampaignRequest, db: AsyncSession = Dep
     flyer_id = flyer.id
 
     # ── Step 2: Campaign ──────────────────────────────────────────────────────
+    # Resolve avatar/product from template defaults if not explicitly provided
+    tmpl = CAMPAIGN_TEMPLATES.get(data.template_id or "", {})
+    resolved_avatar  = data.avatar   or tmpl.get("avatar")
+    resolved_product = data.product  or tmpl.get("product")
+    resolved_market  = tmpl.get("market", data.market) if tmpl else data.market
+    resolved_budget  = tmpl.get("budget_hint", data.budget_hint) if tmpl else data.budget_hint
+
+    if not resolved_avatar or not resolved_product:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide template_id OR both avatar and product.",
+        )
+
     campaign_result = await build_ad_campaign(
         db=db,
-        avatar=data.avatar,
-        product=data.product,
+        avatar=resolved_avatar,
+        product=resolved_product,
         proof=data.proof,
-        market=data.market,
-        budget_hint=data.budget_hint,
+        market=resolved_market,
+        budget_hint=resolved_budget,
         flyer_image_url=flyer_result["url"],
+        template_id=data.template_id,
+        reference_page_slug=data.reference_page_slug,
     )
 
     await db.commit()
@@ -832,11 +888,16 @@ async def flyer_to_campaign(data: FlyerToCampaignRequest, db: AsyncSession = Dep
     if "error" in campaign_result:
         raise HTTPException(500, campaign_result["error"])
 
+    # Attach facebook_setup from template if available
+    if data.template_id and data.template_id in CAMPAIGN_TEMPLATES:
+        campaign_result["facebook_setup"] = CAMPAIGN_TEMPLATES[data.template_id].get("facebook", {})
+
     return {
         **campaign_result,
         "flyer_id": flyer_id,
         "flyer_image_url": flyer_result["url"],
         "avatar_provider": avatar_result.provider,
+        "template_used": data.template_id,
     }
 
 

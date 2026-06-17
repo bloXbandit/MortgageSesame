@@ -4,6 +4,7 @@ import Nav from '../components/Nav'
 import Footer from '../components/Footer'
 import RateTicker from '../components/RateTicker'
 import ListingCard from '../components/ListingCard'
+import { useCurrentRates } from '../hooks/useRates'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -18,6 +19,7 @@ export default function Listings() {
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
+  const { rates } = useCurrentRates()
 
   useEffect(() => {
     setLoading(true)
@@ -114,7 +116,7 @@ export default function Listings() {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 22 }}>
-              {listings.map(l => <ListingCard key={l.id} listing={l} />)}
+              {listings.map(l => <ListingCard key={l.id} listing={l} rates={rates} />)}
             </div>
           )}
         </div>
@@ -124,7 +126,7 @@ export default function Listings() {
       <div style={{ background: '#fff', borderTop: '1px solid #ede8e0', padding: '16px 24px' }}>
         <p style={{ maxWidth: 1100, margin: '0 auto', fontSize: '0.7rem', color: '#aaa', lineHeight: 1.6 }}>
           All payment estimates shown are for educational purposes only. Not a rate lock or commitment to lend.
-          Estimates are based on example rates and may not reflect current market conditions. Actual payments vary.
+          Payment estimates use current FRED weekly average rates as a baseline. Actual rate depends on credit score, down payment, and loan type. Estimates may not reflect current market conditions.
           NMLS #{BANKER_NMLS}.
         </p>
       </div>

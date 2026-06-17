@@ -34,10 +34,16 @@ function ScenarioPanel({ label, accentColor, totalMo, closing, multiplierPct }) 
 }
 
 /**
- * Quick inline estimate — same multipliers as calculator.py
- * No API call needed; runs purely from list_price.
+ * Full PITI estimate — uses live FRED rates when available, falls back to
+ * hardcoded defaults. Uses actual taxes/insurance/HOA from listing when entered.
  */
-function estimatePayments(price) {
+function estimatePayments(listing, rates) {
+  const price = listing.list_price || 0
+
+  // Live rates from FRED snapshot — fall back to safe defaults if not loaded yet
+  const fhaRate   = rates?.rate_fha_30          || 6.75
+  const convRate  = rates?.rate_conventional_30 || 7.00
+
   const piRate = (annualRate, years) => {
     const mo = annualRate / 100 / 12
     const n = years * 12
@@ -45,49 +51,67 @@ function estimatePayments(price) {
     return mo * Math.pow(1 + mo, n) / (Math.pow(1 + mo, n) - 1)
   }
 
-  const taxesMo = (price * 0.011) / 12
-  const insMo   = (price * 0.005) / 12
+  // Taxes: use actual annual_taxes if entered, else estimate 1.1% of price
+  const taxesMo = listing.annual_taxes
+    ? listing.annual_taxes / 12
+    : (price * 0.011) / 12
 
-  // FHA — 3.5% down, 6.75%, 1.75% upfront MIP rolled in, 0.55% annual MIP
+  // Homeowners insurance: use actual annual_insurance if entered, else 0.5% estimate
+  const insMo = listing.annual_insurance
+    ? listing.annual_insurance / 12
+    : (price * 0.005) / 12
+
+  // HOA: include monthly amount if entered
+  const hoaMo = listing.hoa_monthly || 0
+
+  const tiHoa = taxesMo + insMo + hoaMo
+
+  // FHA — 3.5% down, live FHA rate, 1.75% upfront MIP rolled in, 0.55% annual MIP
   const fhaDown    = price * 0.035
   const fhaBase    = price - fhaDown
   const fhaLoan    = fhaBase * 1.0175
-  const fhaPi      = fhaLoan * piRate(6.75, 30)
+  const fhaPi      = fhaLoan * piRate(fhaRate, 30)
   const fhaMip     = fhaBase * 0.0055 / 12
-  const fhaTotalMo = Math.round(fhaPi + fhaMip + taxesMo + insMo)
-  const fhaClosing = Math.round(price * 0.07)   // 7% of sale price
+  const fhaTotalMo = Math.round(fhaPi + fhaMip + tiHoa)
+  const fhaClosing = Math.round(price * 0.07)
   const fhaCash    = Math.round(fhaDown) + fhaClosing
 
-  // Conventional 3% down — 7.00%, 0.7% PMI, 6.5% closing cost multiplier
+  // Conventional 3% down — live conv rate, 0.7% PMI
   const conv3Down    = price * 0.03
   const conv3Loan    = price - conv3Down
-  const conv3Pi      = conv3Loan * piRate(7.00, 30)
+  const conv3Pi      = conv3Loan * piRate(convRate, 30)
   const conv3Pmi     = conv3Loan * 0.007 / 12
-  const conv3TotalMo = Math.round(conv3Pi + conv3Pmi + taxesMo + insMo)
-  const conv3Closing = Math.round(price * 0.065) // 6.5% of sale price
+  const conv3TotalMo = Math.round(conv3Pi + conv3Pmi + tiHoa)
+  const conv3Closing = Math.round(price * 0.065)
   const conv3Cash    = Math.round(conv3Down) + conv3Closing
 
-  // Conventional 5% down — 7.00%, 0.7% PMI, 8.5% closing cost multiplier
+  // Conventional 5% down — live conv rate, 0.7% PMI
   const conv5Down    = price * 0.05
   const conv5Loan    = price - conv5Down
-  const conv5Pi      = conv5Loan * piRate(7.00, 30)
+  const conv5Pi      = conv5Loan * piRate(convRate, 30)
   const conv5Pmi     = conv5Loan * 0.007 / 12
-  const conv5TotalMo = Math.round(conv5Pi + conv5Pmi + taxesMo + insMo)
-  const conv5Closing = Math.round(price * 0.085) // 8.5% of sale price
+  const conv5TotalMo = Math.round(conv5Pi + conv5Pmi + tiHoa)
+  const conv5Closing = Math.round(price * 0.09)
   const conv5Cash    = Math.round(conv5Down) + conv5Closing
+
+  const usedActualTI = !!(listing.annual_taxes || listing.annual_insurance)
 
   return {
     fhaTotalMo,  fhaClosing,  fhaCash,  fhaDown:  Math.round(fhaDown),
     conv3TotalMo, conv3Closing, conv3Cash, conv3Down: Math.round(conv3Down),
     conv5TotalMo, conv5Closing, conv5Cash, conv5Down: Math.round(conv5Down),
+    hoaMo: Math.round(hoaMo),
+    usedActualTI,
+    fhaRate,
+    convRate,
   }
 }
 
-export default function ListingCard({ listing }) {
+export default function ListingCard({ listing, rates }) {
   const [showIntake,    setShowIntake]    = useState(false)
   const [showEstimates, setShowEstimates] = useState(false)
   const status = STATUS_STYLES[listing.status] || STATUS_STYLES.active
-  const est    = estimatePayments(listing.list_price || 0)
+  const est    = estimatePayments(listing, rates)
 
   return (
     <>
@@ -187,7 +211,7 @@ export default function ListingCard({ listing }) {
               transition: 'background 0.15s',
             }}
           >
-            <span>📊 Est. Payments &amp; Closing Costs</span>
+            <span>📊 Est. PITI{est.hoaMo > 0 ? ' + HOA' : ''} &amp; Closing Costs</span>
             <span style={{ color: '#aaa', fontWeight: 400 }}>{showEstimates ? '▲' : '▼'}</span>
           </button>
 
@@ -204,25 +228,25 @@ export default function ListingCard({ listing }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
                 {/* FHA column */}
                 <ScenarioPanel
-                  label="FHA · 3.5% dn"
+                  label={`FHA · 3.5% down · ${est.fhaRate}%`}
                   accentColor="#92520b"
                   totalMo={est.fhaTotalMo}
                   closing={est.fhaClosing}
                   multiplierPct="7%"
                 />
                 <ScenarioPanel
-                  label="Conv · 3% dn"
+                  label={`Conv · 3% down · ${est.convRate}%`}
                   accentColor="#1e40af"
                   totalMo={est.conv3TotalMo}
                   closing={est.conv3Closing}
                   multiplierPct="6.5%"
                 />
                 <ScenarioPanel
-                  label="Conv · 5% dn"
+                  label={`Conv · 5% down · ${est.convRate}%`}
                   accentColor="#166534"
                   totalMo={est.conv5TotalMo}
                   closing={est.conv5Closing}
-                  multiplierPct="8.5%"
+                  multiplierPct="9%"
                 />
               </div>
 
@@ -236,14 +260,24 @@ export default function ListingCard({ listing }) {
                 color: '#7a5c1e',
                 lineHeight: 1.5,
               }}>
-                <strong>What's included in closing cost estimates:</strong> county/insurance escrow prepaids,
-                basic title &amp; settlement fees, and lender origination costs — calculated as a multiplier
-                of the sale price (FHA&nbsp;7%&nbsp;·&nbsp;Conv&nbsp;3%:&nbsp;6.5%&nbsp;·&nbsp;Conv&nbsp;5%:&nbsp;8.5%).
+                <strong>Monthly est. = full PITI{est.hoaMo > 0 ? ' + HOA' : ''}:</strong>{' '}
+                Principal &amp; Interest + Taxes + Homeowners Insurance + PMI&nbsp;/&nbsp;MIP
+                {est.hoaMo > 0 && <> + HOA ({fmt(est.hoaMo)}/mo)</>}.
+                {' '}FHA includes 1.75% upfront MIP (rolled into loan) + 0.55% annual MIP.
+                Conventional includes ~0.70% annual PMI (drops off at 20% equity).
+                <br/>
+                {est.usedActualTI
+                  ? <span style={{ color: '#4a7c59' }}>✓ Taxes &amp; homeowners insurance pulled from listing data.</span>
+                  : 'Taxes estimated at 1.1% · homeowners insurance at 0.5% of price (actuals not entered).'}
+                <br/>
+                <strong style={{ display: 'block', marginTop: 4 }}>Closing cost est.:</strong> escrow prepaids,
+                title &amp; settlement fees, lender costs — as a % of sale price
+                (FHA&nbsp;7%&nbsp;·&nbsp;Conv&nbsp;3%:&nbsp;6.5%&nbsp;·&nbsp;Conv&nbsp;5%:&nbsp;9%).
                 <br/>
                 <span style={{ color: '#999', marginTop: 4, display: 'block' }}>
-                  ⚠ Raw estimate only — does <strong>not</strong> include specialized lender pricing,
-                  seller concessions, or down payment assistance programs, any of which can
-                  significantly reduce your actual out-of-pocket costs. Tap below for your real numbers.
+                  ⚠ Estimates only — does <strong>not</strong> include specialized lender pricing,
+                  seller concessions, or DPA programs, any of which can significantly reduce
+                  your actual out-of-pocket costs.
                 </span>
               </div>
             </div>
