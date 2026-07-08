@@ -27,10 +27,11 @@ from dataclasses import dataclass, field
 from app.config import settings as _s
 
 # ── Operator identity — sourced from .env, never hardcode below this line ──────
-_BANKER_NAME = _s.banker_name
-_BANKER_NMLS = _s.banker_nmls
-_BOOKING_URL = _s.calcom_link
-_APP_NAME    = _s.app_name
+_BANKER_NAME    = _s.banker_name
+_BANKER_NMLS   = _s.banker_nmls
+_BOOKING_URL   = _s.calcom_link
+_SERVICE_STATES = _s.service_states
+_APP_NAME      = _s.app_name
 
 # Imported lazily to avoid circular imports at module load
 def _unsubscribe_url(email: str) -> str:
@@ -307,7 +308,7 @@ EMAIL_SEQUENCES = {
     "dpa_education": [
         {
             "step": 1,
-            "subject_template": "Did you know Maryland has $40K in free homebuyer money?",
+            "subject_template": f"Did you know {_SERVICE_STATES} has down payment assistance available?",
             "intent": "DPA awareness — most buyers have no idea these programs exist",
             "tone": "friendly, educational, surprising — 'free money' angle",
         },
@@ -712,11 +713,11 @@ def _realtor_email_html(p: dict, step: int) -> tuple[str, str, str]:
     <p>NMLS #{_BANKER_NMLS}&nbsp;&nbsp;·&nbsp;&nbsp;MortgageSesame</p>
   </div>
   <div class="body">
-    <p>I'm a local mortgage banker in Maryland/DC and I wanted to reach out to agents at {company}.</p>
+    <p>I'm a local mortgage banker in {_SERVICE_STATES} and I wanted to reach out to agents at {company}.</p>
     <p>Not a pitch. Just want to offer a few things that cost you nothing but might help your buyers:</p>
     <ul class="value-list">
       <li>Same-day pre-approvals (real credit pull, not soft)</li>
-      <li>DPA program matches — I know every MD/DC program cold</li>
+      <li>DPA program matches — I know every program in {_SERVICE_STATES} cold</li>
       <li>Underwriting in-house — no broker delays, no surprises at the table</li>
       <li>I answer my phone. At 8pm before a showing. Seriously.</li>
     </ul>
@@ -733,11 +734,11 @@ def _realtor_email_html(p: dict, step: int) -> tuple[str, str, str]:
 
         text = f"""Hey {first},
 
-I'm {_BANKER_NAME} — local mortgage banker in MD/DC. Reaching out to agents at {company}.
+I'm {_BANKER_NAME} — local mortgage banker in {_SERVICE_STATES}. Reaching out to agents at {company}.
 
 What I offer your buyers (at no cost to you):
 → Same-day pre-approvals (real credit pull)
-→ Every MD/DC DPA program — I know them cold
+→ Every DPA program in {_SERVICE_STATES} — I know them cold
 → Underwriting in-house — no delays
 → I answer my phone. 8pm before a showing. Seriously.
 
@@ -784,7 +785,7 @@ Unsubscribe: {{unsubscribe_url}}"""
     </div>
     <div class="pain-box">
       <h3>3. DPA left on the table</h3>
-      <p>Maryland has programs with up to $40K in assistance. Most agents don't know which buyers qualify. I do this every day — I'll tell you in 5 minutes if your buyer qualifies.</p>
+      <p>{_SERVICE_STATES} has down payment assistance programs available. Most agents don't know which buyers qualify. I do this every day — I'll tell you in 5 minutes if your buyer qualifies.</p>
     </div>
     <p>This is the difference between a buyer who loses 3 offers and a buyer who closes.</p>
     <a class="btn" href="{booking}">Let's talk about your buyer pipeline →</a>
@@ -803,7 +804,7 @@ Three reasons buyers lose in this market:
 
 1. Weak pre-approvals — soft-pull letters don't hold. Mine is full credit pull, income verified.
 2. No rate buydown strategy — seller concessions structured as buydowns can close the affordability gap.
-3. DPA left on the table — MD has up to $40K available. Most agents don't know who qualifies. I do.
+3. DPA left on the table — down payment assistance is available in {_SERVICE_STATES}. Most agents don't know who qualifies. I do.
 
 This is the difference between losing 3 offers and closing.
 
@@ -898,7 +899,7 @@ SMS_TEMPLATES = {
 
     "investor_refi": {
         1: (
-            "Kenneth here (NMLS#{_BANKER_NMLS}) — I specialize in DSCR loans for investors. "
+            f"{_BANKER_NAME} here (NMLS#{_BANKER_NMLS}) — I specialize in DSCR loans for investors. "
             "Saw {addr_short} in your portfolio. "
             "There may be better cash flow available. Worth a quick look? (Reply STOP to opt out)"
         ),
@@ -906,8 +907,8 @@ SMS_TEMPLATES = {
 
     "realtor_partnership": {
         1: (
-            "Hi {first}, {_BANKER_NAME} from MortgageSesame (NMLS#{_BANKER_NMLS}). "
-            "Local lender, same-day pre-approvals, know every MD/DC DPA program. "
+            f"Hi {{first}}, {_BANKER_NAME} from MortgageSesame (NMLS#{_BANKER_NMLS}). "
+            f"Local lender, same-day pre-approvals, know every DPA program in {_SERVICE_STATES}. "
             "Good time to connect? (Reply STOP to opt out)"
         ),
         2: (
@@ -982,7 +983,7 @@ def _build_call_script(p: dict, trigger: str = "cold", campaign_type: str = "ref
         )
     elif campaign_type in ("investor_refi", "dscr"):
         pitch = (
-            f"I work with a lot of real estate investors in the MD/DC area and specialize in DSCR loans — "
+            f"I work with a lot of real estate investors in the {_SERVICE_STATES} area and specialize in DSCR loans — "
             f"those are debt-service coverage ratio loans that qualify based on the property's income, "
             f"not your personal income. I pulled some data on {addr_short} and wanted to see if there's "
             f"an opportunity to improve cash flow or pull equity out for your next acquisition. "
@@ -990,7 +991,7 @@ def _build_call_script(p: dict, trigger: str = "cold", campaign_type: str = "ref
         )
     elif campaign_type in ("realtor_partnership", "listing_agent_outreach"):
         pitch = (
-            f"I work with agents in the MD/DC market and I specialize in getting buyers across the "
+            f"I work with agents in the {_SERVICE_STATES} market and I specialize in getting buyers across the "
             f"finish line — same-day pre-approvals, DPA program expertise, in-house underwriting. "
             f"I wanted to introduce myself because I know buyers in this market lose deals when their "
             f"lender isn't sharp. I'd love to be a resource for you. Do you have any buyers in the "
@@ -1031,7 +1032,7 @@ def _build_call_script(p: dict, trigger: str = "cold", campaign_type: str = "ref
     elif campaign_type in ("realtor_partnership", "listing_agent_outreach"):
         talking_points = [
             "Same-day pre-approvals — full credit pull, not soft-pull theater",
-            "Every MD/DC DPA program — I'll tell you in 5 min if buyer qualifies",
+            f"Every DPA program in {_SERVICE_STATES} — I'll tell you in 5 min if buyer qualifies",
             "2-1 buydown structures using seller concessions",
             "In-house underwriting — no 3rd-party delays",
             "I answer my phone — 8pm, weekends, before showings",
@@ -1207,6 +1208,7 @@ class CampaignWriter:
             "phone": phone,
             "nmls": _BANKER_NMLS,
             "banker_name": _BANKER_NAME,
+            "service_states": _SERVICE_STATES,
             "template_key": template_key,
         }
 

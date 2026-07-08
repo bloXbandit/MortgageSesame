@@ -58,10 +58,10 @@ export default function DpaHub() {
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
             <div>
               <h1 style={{ margin: '0 0 10px', color: '#fff', fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, lineHeight: 1.1 }}>
-                MD & DC Down Payment Programs
+                {SERVICE_STATES} Down Payment Programs
               </h1>
               <p style={{ margin: 0, color: '#888', fontSize: '1rem', maxWidth: 520, lineHeight: 1.65 }}>
-                Grants, forgivable loans, and deferred seconds — Maryland and DC have programs
+                Grants, forgivable loans, and deferred seconds — buyers in {SERVICE_STATES} have access to programs
                 that can cover your entire down payment. Most buyers don't know they qualify.
               </p>
             </div>
@@ -159,7 +159,7 @@ export default function DpaHub() {
             {[
               { type: 'Grant', icon: '🎁', desc: 'Free money — no repayment required. Rarest type. Usually small amounts or specific to certain professions.' },
               { type: 'Forgivable Loan', icon: '✅', desc: 'Loan that gets "forgiven" over time — typically 3–10 years. Stay in the home and the balance disappears.' },
-              { type: 'Deferred Loan', icon: '⏸️', desc: '0% interest, no monthly payment. Full balance due when you sell, refinance, or move out. Very common in MD/DC.' },
+              { type: 'Deferred Loan', icon: '⏸️', desc: `0% interest, no monthly payment. Full balance due when you sell, refinance, or move out. Very common in ${SERVICE_STATES}.` },
               { type: 'Second Lien', icon: '🏛️', desc: 'A second mortgage, usually at low or 0% interest. May have monthly payments or may be deferred.' },
             ].map(({ type, icon, desc }) => (
               <div key={type} style={{ background: '#2a2a2a', border: '1px solid #333', borderRadius: 8, padding: '18px' }}>

@@ -2,7 +2,7 @@
 Agent Memory — persistent logs and ask-queue for Clawdbot / Hermes.
 
 AgentMemoryLog  — one row per agent run. Gives the agent memory between sessions.
-AgentAsk        — questions/requests the agent posts to the operator (Kenneth).
+AgentAsk        — questions/requests the agent posts to the operator.
 """
 
 from datetime import datetime

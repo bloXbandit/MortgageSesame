@@ -78,13 +78,17 @@ class GmailEmailProvider(EmailProvider):
         reply_to  = payload.get("reply_to", "")
         to_name   = payload.get("to_name", "")
 
+        # Allow per-send override of from identity (campaign-level white-label)
+        from_name  = payload.get("from_name", self.from_name)
+        from_email = payload.get("from_email", self.from_email)
+
         # Build MIME message
         msg = MIMEMultipart("alternative")
         msg["Subject"]  = subject
-        msg["From"]     = formataddr((self.from_name, self.from_email))
+        msg["From"]     = formataddr((from_name, from_email))
         msg["To"]       = formataddr((to_name, to_email)) if to_name else to_email
         msg["Date"]     = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(domain=self.from_email.split("@")[-1] if "@" in self.from_email else "mail")
+        msg["Message-ID"] = make_msgid(domain=from_email.split("@")[-1] if "@" in from_email else "mail")
 
         if reply_to:
             msg["Reply-To"] = reply_to

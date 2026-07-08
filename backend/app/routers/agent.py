@@ -31,6 +31,8 @@ router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(requir
 
 
 # ── GET /agent/context ─────────────────────────────────────────────────────
+from app.config import settings as _settings
+
 @router.get("/context")
 async def get_context(db: AsyncSession = Depends(get_db)):
     """Returns current system state summary for agent orientation."""
@@ -45,8 +47,19 @@ async def get_context(db: AsyncSession = Depends(get_db)):
         "total_campaigns": campaigns_q.scalars().all().__len__(),
         "pending_approvals": pending_q.scalars().all().__len__(),
         "timestamp": datetime.utcnow().isoformat(),
+        "banker_identity": {
+            "name": _settings.banker_name,
+            "nmls": _settings.banker_nmls,
+            "service_states": _settings.service_states,
+            "calcom_link": _settings.calcom_link,
+            "app_1003_url": _settings.app_1003_url,
+            "zillow_url": _settings.zillow_url,
+            "public_site_url": _settings.public_site_url,
+            "backend_url": _settings.backend_url,
+            "voice_persona_name": _settings.agent_persona_name,
+        },
         "agent_instructions": (
-            "You are operating within MortgageSesame. "
+            f"You are operating on behalf of {_settings.banker_name or 'the mortgage banker'} within MortgageSesame. "
             "All outbound actions require human approval unless explicitly unlocked. "
             "Never contact DNC/opted-out contacts. "
             "Always run compliance checks before queuing outreach."

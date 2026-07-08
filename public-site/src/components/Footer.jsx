@@ -29,7 +29,7 @@ export default function Footer() {
               <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem' }}>MortgageSesame</span>
             </div>
             <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.6 }}>
-              Maryland & DC mortgage expertise for first-time buyers and investors.
+              {SERVICE_STATES} mortgage expertise for first-time buyers and investors.
             </p>
             <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#555' }}>
               NMLS #{BANKER_NMLS}
@@ -140,7 +140,7 @@ export default function Footer() {
             Actual rates, costs, and eligibility depend on credit score, debt-to-income ratio, property type,
             lender fees, title costs, property taxes, homeowner's insurance, and other factors.
             DPA program details are subject to change — verify current requirements directly with the administering agency.
-            Equal Housing Opportunity. NMLS #{BANKER_NMLS}. Licensed in Maryland and Washington DC.
+            Equal Housing Opportunity. NMLS #{BANKER_NMLS}. Licensed in {SERVICE_STATES}.
           </p>
           <p style={{ margin: '10px 0 0', fontSize: '0.7rem', color: '#333' }}>
             © {new Date().getFullYear()} MortgageSesame · Equal Housing Lender

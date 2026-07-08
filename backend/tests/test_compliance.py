@@ -162,7 +162,7 @@ class TestAdDisclaimer:
 
     def test_ad_with_nmls_passes(self):
         result = check_content(
-            "Great rates! NMLS #1454510. Equal Housing Lender.", is_ad=True
+            "Great rates! NMLS #XXXXXX. Equal Housing Lender.", is_ad=True
         )
         assert not any(f["rule"] == "missing_ad_disclaimer" for f in result.flags)
 

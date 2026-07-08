@@ -40,7 +40,7 @@ export default function Listings() {
       <div style={{ background: '#1f1f1f', padding: '48px 24px 40px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ fontSize: '0.7rem', color: '#f5c87a', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600, marginBottom: 6 }}>
-            Maryland & DC
+            {SERVICE_STATES}
           </div>
           <h1 style={{ margin: '0 0 10px', color: '#fff', fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, lineHeight: 1.1 }}>
             Homes with real numbers.

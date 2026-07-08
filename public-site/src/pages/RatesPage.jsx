@@ -61,7 +61,7 @@ const RATE_DEFINITIONS = [
     label: 'Jumbo 30yr Fixed',
     slug: 'conventional',
     icon: '🏰',
-    who: 'Buyers above conforming loan limits (~$766,550 in most MD/DC markets)',
+    who: 'Buyers above conforming loan limits (~$766,550 in most markets)',
     notes: 'Higher loan amount = higher rate, usually. Strong credit (720+) and reserves typically required.',
   },
   {

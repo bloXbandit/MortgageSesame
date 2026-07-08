@@ -1,4 +1,4 @@
-import { CALCOM, APP_1003, BANKER_NMLS, SERVICE_STATES, VIDEO_CONSUMER, VIDEO_REALTOR } from '../config'
+import { CALCOM, APP_1003, BANKER_NAME, BANKER_NMLS, SERVICE_STATES, VIDEO_CONSUMER, VIDEO_REALTOR } from '../config'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import RateTicker from '../components/RateTicker'
@@ -104,7 +104,7 @@ export default function Home() {
             width: 'fit-content',
           }}>
             <span style={{ width: 6, height: 6, background: '#e8a84c', borderRadius: '50%', display: 'inline-block' }} />
-            Maryland & DC · NMLS #{BANKER_NMLS}
+            {SERVICE_STATES} · NMLS #{BANKER_NMLS}
           </span>
 
           <h1 style={{
@@ -120,7 +120,7 @@ export default function Home() {
 
           <p style={{ fontSize: '1.0625rem', color: '#555', lineHeight: 1.65, margin: '0 0 32px', maxWidth: 400 }}>
             Real rate data. Real homes. Real down payment programs.
-            I'm a Maryland mortgage banker — not a faceless bank.
+            I'm {BANKER_NAME}, a mortgage banker in {SERVICE_STATES} — not a faceless bank.
             Let's get you home.
           </p>
 
@@ -280,7 +280,7 @@ export default function Home() {
             Free money is on the table.
           </h2>
           <p style={{ margin: '0 0 28px', color: '#888', fontSize: '0.9375rem', maxWidth: 520 }}>
-            Maryland and DC have some of the best down payment programs in the country.
+            Buyers in {SERVICE_STATES} have access to some of the best down payment programs in the country.
             Most buyers don't know they qualify.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
@@ -481,7 +481,7 @@ export default function Home() {
                   </div>
                   <div style={{ marginTop: 16, textAlign: 'center' }}>
                     <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1f1f1f', marginBottom: 4 }}>For Realtors</div>
-                    <div style={{ fontSize: '0.8125rem', color: '#888' }}>Why top agents partner with Kenneth Manjo</div>
+                    <div style={{ fontSize: '0.8125rem', color: '#888' }}>Why top agents partner with {BANKER_NAME}</div>
                   </div>
                 </div>
               )}

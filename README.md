@@ -1,7 +1,7 @@
 # MortgageSesame
 
 AI-powered mortgage acquisition operating system for solo mortgage bankers.
-Built for NMLS #1454510 — Maryland / DC market.
+Built to be white-labeled — configure your NMLS and service states in `.env`.
 
 ---
 
@@ -392,7 +392,7 @@ POST /api/v1/outreach/prospect-lists/{id}/generate-batch
 Every direct mail piece includes:
 - **ADVERTISEMENT** header label
 - **NOT A CHECK — NOT A LOAN APPROVAL** disclaimer
-- NMLS #1454510
+- NMLS # (pulled from `BANKER_NMLS` env var)
 - Equal Housing Lender
 - Personal QR code linked to booking page
 
@@ -726,7 +726,7 @@ Authorization: Bearer {token}
 
 ## NMLS Compliance Notes
 
-- NMLS #1454510 appears on every public page, every email, every mailer
+- NMLS # (from `BANKER_NMLS` env var) appears on every public page, every email, every mailer
 - All rate/payment figures are labeled **illustrative** — not a commitment to lend
 - Direct mail templates include **ADVERTISEMENT** header and **NOT A CHECK** disclaimer on every piece
 - DNC check happens at score time (flag) and again at send time (hard block)

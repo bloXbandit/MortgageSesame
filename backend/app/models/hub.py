@@ -93,7 +93,7 @@ class DpaType(str, enum.Enum):
 
 
 class DpaProgram(Base):
-    """Down payment assistance programs — MD/DC seeded, designed to scale to any state."""
+    """Down payment assistance programs — seeded per deployment state(s), designed to scale to any state."""
     __tablename__ = "dpa_programs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))

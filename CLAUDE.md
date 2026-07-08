@@ -1,20 +1,20 @@
 # CLAUDE.md — MortgageSesame Operating Manual
 
-AI mortgage acquisition OS for a solo mortgage banker (NMLS #1454510, MD/DC).
+AI mortgage acquisition OS for solo mortgage bankers — white-label via `.env`.
 Architecture, API reference, and campaign-engine walkthrough live in [README.md](README.md) — read it before backend work. This file covers what the README doesn't: conventions, tripwires, quality bars, and when to stop and ask.
 
 **One rule above all others: nothing sends externally without human approval.** Email, SMS, direct mail, social posts, agent actions — everything queues for review. Never write code that bypasses the approval queue, the suppression check, or the compliance service. This is a regulated industry (TCPA, RESPA, NMLS advertising rules); a "helpful shortcut" here is a legal violation.
 
-## Environment facts (verified, don't trust the README on these)
+## Environment facts (verified)
 
-- **Python is 3.9.6** (`backend/.venv`), not 3.11+ as the README claims. No `match` statements, no `X | None` unions — use `Optional[X]`. `list[dict]` builtin generics are OK (3.9+).
-- **The live database is `backend/mortgagesesame.db`** (no underscore). `backend/mortgage_sesame.db` is an empty stale artifact — never read or write it. The live DB contains real data; never delete it without asking.
-- **There are no tests.** Verification means running the thing (see quality bars below), not `pytest`.
+- **Python is 3.9.6** (`backend/.venv`). No `match` statements, no `X | None` unions — use `Optional[X]`. `list[dict]` builtin generics are OK (3.9+).
+- **The live database is `backend/mortgagesesame.db`.** It contains real data; never delete or regenerate it without asking.
+- **Tests exist only for the compliance layer**: `backend/tests/test_compliance.py` (37 regression tests pinning blocked phrases, severities, opt-out and DNC gates). Run with `cd backend && .venv/bin/pytest tests/ -v`. They must stay green — any change touching `services/compliance.py` or outreach templates runs them before it's done. For everything else, verification still means running the thing (see quality bars below).
 - Run everything with `make dev` (backend :8000, public-site :5173, admin-app :5174). API docs at `localhost:8000/docs` in dev.
 
 ## Backend conventions (FastAPI, `backend/`)
 
-- **No `schemas/` files, no `response_model`.** The `app/schemas/` dir is empty on purpose. Request bodies are inline Pydantic `BaseModel` classes at the top of each router; responses are plain dicts built by a module-level `_thing_dict(obj)` serializer (see `app/routers/listings.py` for the canonical shape). Follow this — don't introduce a schemas layer.
+- **No schemas layer, no `response_model`.** Request bodies are inline Pydantic `BaseModel` classes at the top of each router; responses are plain dicts built by a module-level `_thing_dict(obj)` serializer (see `app/routers/listings.py` for the canonical shape). There is deliberately no `app/schemas/` directory — don't create one.
 - Async SQLAlchemy 2.0 everywhere: `select()` + `await db.execute()` + `.scalar_one_or_none()` / `.scalars().all()`. `db: AsyncSession = Depends(get_db)`.
 - Datetimes serialize as `obj.created_at.isoformat() if obj.created_at else None`.
 - Auth is a deliberate three-way choice per endpoint: public (no dep), `get_current_user` (admin JWT), or `require_agent_key` (agent API key OR admin JWT — see `app/middleware/auth.py`). State which one you chose and why.
@@ -40,7 +40,8 @@ Architecture, API reference, and campaign-engine walkthrough live in [README.md]
 6. **Inventing a schemas/ layer or `response_model`s.** Matches FastAPI tutorials, doesn't match this repo. Inline request models + `_dict()` serializers.
 7. **Forgetting registration.** A new router that isn't added to `main.py` (or a page not added to `App.jsx`) fails silently — no error, just a 404. Registration is part of the change, not a follow-up.
 8. **Editing generated output instead of the generator.** Outreach HTML/scripts come from `campaign_writer.py` and `mail_templates.py`. Fix the template/generator, not a stored draft.
-9. **Dropping the compliance boilerplate.** Every outward-facing template needs: NMLS #1454510, Equal Housing Lender, rates labeled *illustrative*; direct mail additionally needs the ADVERTISEMENT header and NOT A CHECK disclaimer. Copying a template to make a new one and trimming "clutter" removes legally required text.
+9. **Dropping the compliance boilerplate.** Every outward-facing template needs: NMLS # (from env), Equal Housing Lender, rates labeled *illustrative*; direct mail additionally needs the ADVERTISEMENT header and NOT A CHECK disclaimer. Copying a template to make a new one and trimming "clutter" removes legally required text.
+10. **Baking `VITE_API_URL` into an Electron/iOS build.** Vite env vars resolve at *build time*. Dev-only overrides live in `admin-app/.env.development` (loaded by `npm run dev` only) — never in `admin-app/.env`, which applies to all modes and would hardcode `localhost` into the iOS app, breaking the Settings-page server URL override that lets the iPhone reach the Mac over WiFi.
 
 ## Quality bar — a change is done when (checkable, per deliverable)
 
@@ -61,6 +62,7 @@ Architecture, API reference, and campaign-engine walkthrough live in [README.md]
 **Anything generating outreach/marketing content**
 - [ ] Compliance boilerplate present (rule 9 above).
 - [ ] `services/compliance.py` check passes on sample output.
+- [ ] `pytest tests/ -v` green (the compliance regression suite).
 - [ ] Output lands as a draft in the approval queue; nothing auto-sends.
 
 **Agent API changes**

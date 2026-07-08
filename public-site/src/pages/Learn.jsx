@@ -4,6 +4,7 @@ import Footer from '../components/Footer'
 import RateTicker from '../components/RateTicker'
 import MicroIntake from '../components/MicroIntake'
 import { useState } from 'react'
+import { SERVICE_STATES } from '../config'
 
 const PRODUCTS = [
   {
@@ -35,7 +36,7 @@ const PRODUCTS = [
     label: 'Down Payment Assistance',
     icon: '💰',
     tagline: 'Free money most buyers never ask about.',
-    desc: 'Maryland and DC have grants, forgivable loans, and deferred seconds that can cover your entire down payment. Most buyers qualify and don\'t know it.',
+    desc: `Grants, forgivable loans, and deferred seconds are available in ${SERVICE_STATES} and can cover your entire down payment. Most buyers qualify and don't know it.`,
     tags: ['Up to $202K in DC', 'Up to $40K in MD counties', 'First-time buyers', 'Income limits apply'],
   },
   {
@@ -43,7 +44,7 @@ const PRODUCTS = [
     label: 'USDA Loan',
     icon: '🌾',
     tagline: '$0 down outside the city.',
-    desc: 'Zero down payment for eligible rural and suburban areas. Income limits apply. More of Maryland qualifies than most people think.',
+    desc: `Zero down payment for eligible rural and suburban areas. Income limits apply. More areas in ${SERVICE_STATES} qualify than most people think.`,
     tags: ['$0 down', 'Rural eligible areas', 'Income limits', 'Low guarantee fee'],
   },
   {

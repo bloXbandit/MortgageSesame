@@ -106,7 +106,7 @@ Kenneth problem-solves.
 
 ### MECHANISM 6 — ZILLOW 5-STAR RATING + REAL CLIENT TESTIMONIALS
 **What it is:** Verified 5-star rating on Zillow from real clients. 8 reviews, all 5 stars.
-URL: https://www.zillow.com/lender-profile/kmanjo2/
+URL: [ZILLOW_URL]
 
 **Why it matters:**
 Third-party proof is more powerful than self-promotion.

@@ -65,6 +65,7 @@ def equity_voucher(merge_data: dict) -> str:
     banker_name = merge_data.get("banker_name", "Your Local Mortgage Banker")
     banker_phone = merge_data.get("banker_phone", "")
     banker_nmls = merge_data.get("banker_nmls", _s.banker_nmls)
+    service_states = merge_data.get("service_states", _s.service_states)
     qr_url = merge_data.get("tracking_url", "")
     expires = merge_data.get("expires_label", "90 days")
 
@@ -143,7 +144,7 @@ def equity_voucher(merge_data: dict) -> str:
     actual property value. Actual loan terms, rates, monthly payments, and eligibility are determined by credit
     score, debt-to-income ratio, property appraisal, loan-to-value ratio, and full underwriting review.
     Equal Housing Opportunity. To stop receiving this type of mail, contact us at {banker_phone}.
-    NMLS #{banker_nmls}. Licensed in Maryland and Washington DC.
+    NMLS #{banker_nmls}. Licensed in {service_states}.
   </div>
 </div>
 </body></html>"""
@@ -407,6 +408,7 @@ def realtor_invite(merge_data: dict) -> str:
     banker_name = merge_data.get("banker_name", "Your Local Mortgage Banker")
     banker_phone = merge_data.get("banker_phone", "")
     banker_nmls = merge_data.get("banker_nmls", _s.banker_nmls)
+    service_states = merge_data.get("service_states", _s.service_states)
     hub_url = merge_data.get("hub_url", "")
     qr_url = merge_data.get("tracking_url", "")
 
@@ -448,7 +450,7 @@ def realtor_invite(merge_data: dict) -> str:
     <div class="feature-grid">
       {"".join(f'<div class="feat-box"><div class="feat-title">{t}</div><div class="feat-desc">{d}</div></div>' for t, d in [
           ("21-Day Close Guarantee", "Full underwriting pre-approval before contract — your offers compete like cash."),
-          ("DPA Program Access", "Maryland and DC down payment programs — I find money your buyers didn't know existed."),
+          ("DPA Program Access", f"{service_states} down payment programs — I find money your buyers didn't know existed."),
           ("Live Rate Hub", "Public-facing rate dashboard your clients can check anytime. Builds trust before they call."),
           ("Same-Day Pre-Approvals", "Buyers calling on your listings get answers today, not in 3 days."),
       ])}
@@ -464,7 +466,7 @@ def realtor_invite(merge_data: dict) -> str:
     </div>
   </div>
   <div class="disclaimer">
-    {banker_name} (NMLS #{banker_nmls}). Licensed in Maryland and Washington DC.
+    {banker_name} (NMLS #{banker_nmls}). Licensed in {service_states}.
     Equal Housing Opportunity. To opt out of future mailings, contact us at {banker_phone}.
   </div>
 </div>

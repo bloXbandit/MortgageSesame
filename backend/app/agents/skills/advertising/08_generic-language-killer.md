@@ -77,7 +77,7 @@ Read the copy out loud. If Kenneth would not actually say it in a conversation, 
 
 Before routing to Approval Queue, confirm ALL of the following:
 
-- [ ] NMLS #1454510 appears in copy or caption
+- [ ] NMLS #[BANKER_NMLS] appears in copy or caption
 - [ ] No specific interest rate stated ("X.X%") unless it's a clearly labeled example rate with disclaimer
 - [ ] No guaranteed approval language ("you will qualify," "guaranteed to close," "100% approval")
 - [ ] No fake urgency ("offer expires tonight," "only 3 spots left") unless factually true

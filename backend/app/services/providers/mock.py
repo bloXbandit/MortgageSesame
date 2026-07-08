@@ -277,7 +277,9 @@ class ResendEmailProvider(EmailProvider):
         if not self.api_key:
             return ProviderResult(success=False, error="RESEND_API_KEY not set")
 
-        from_field = f"{self.from_name} <{self.from_email}>" if self.from_name else self.from_email
+        from_name  = payload.get("from_name", self.from_name)
+        from_email = payload.get("from_email", self.from_email)
+        from_field = f"{from_name} <{from_email}>" if from_name else from_email
         to_email = payload.get("to_email")
         if not to_email:
             return ProviderResult(success=False, error="to_email is required")

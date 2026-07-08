@@ -13,6 +13,7 @@ Env var examples:
 """
 
 import os
+from app.config import settings as _settings
 from app.services.providers.base import (
     DirectMailProvider, EmailProvider, SmsProvider,
     VoiceProvider, AddressVerificationProvider, PropertyDataProvider,
@@ -47,28 +48,32 @@ def get_direct_mail_provider() -> DirectMailProvider:
     return MockDirectMailProvider()
 
 
+_from_email = _settings.campaign_from_email or _settings.smtp_user or ""
+_from_name = _settings.campaign_from_name or _settings.banker_name or "MortgageSesame"
+
+
 def get_email_provider() -> EmailProvider:
     name = _env("CAMPAIGN_EMAIL_PROVIDER")
     if name == "gmail":
         return GmailEmailProvider(
-            smtp_host=os.getenv("SMTP_HOST", "smtp.gmail.com"),
-            smtp_port=int(os.getenv("SMTP_PORT", "587")),
-            smtp_user=os.getenv("SMTP_USER", ""),
-            smtp_password=os.getenv("SMTP_PASSWORD", ""),
-            from_email=os.getenv("CAMPAIGN_FROM_EMAIL", os.getenv("SMTP_USER", "")),
-            from_name=os.getenv("CAMPAIGN_FROM_NAME", ""),
+            smtp_host=_settings.smtp_host or "smtp.gmail.com",
+            smtp_port=_settings.smtp_port or 587,
+            smtp_user=_settings.smtp_user,
+            smtp_password=_settings.smtp_password,
+            from_email=_from_email,
+            from_name=_from_name,
         )
     if name == "sendgrid":
         return SendGridEmailProvider(
             api_key=os.getenv("SENDGRID_API_KEY", ""),
-            from_email=os.getenv("CAMPAIGN_FROM_EMAIL", os.getenv("SMTP_USER", "")),
-            from_name=os.getenv("CAMPAIGN_FROM_NAME", "MortgageSesame"),
+            from_email=_from_email,
+            from_name=_from_name,
         )
     if name == "resend":
         return ResendEmailProvider(
             api_key=os.getenv("RESEND_API_KEY", ""),
-            from_email=os.getenv("CAMPAIGN_FROM_EMAIL", os.getenv("SMTP_USER", "")),
-            from_name=os.getenv("CAMPAIGN_FROM_NAME", "MortgageSesame"),
+            from_email=_from_email,
+            from_name=_from_name,
         )
     return MockEmailProvider()
 

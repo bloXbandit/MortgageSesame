@@ -62,10 +62,10 @@ Do NOT write 300-word ad copy. If it requires that much explaining, the angle is
 The image does the job of stopping the scroll before the copy is even read.
 
 **What works for mortgage in 2024–2025:**
-- Candid photo of Kenneth — at a table, on the phone, outside a home — no heavy editing
+- Candid photo of [BANKER_NAME] — at a table, on the phone, outside a home — no heavy editing
 - Real family receiving keys or celebrating — stock only if it looks genuinely candid
 - Text overlay: MAXIMUM 5 words, large font, high contrast
-- Color: Warm backgrounds (Kenneth's brand: #ffedd2 buttermilk / #1f1f1f carbon / #f5c87a gold)
+- Color: Warm backgrounds ([BANKER_NAME]'s brand: #ffedd2 buttermilk / #1f1f1f carbon / #f5c87a gold)
 
 **What does NOT work:**
 - Stock photo of a perfect nuclear family in a perfect house
@@ -117,14 +117,14 @@ For each ad unit, output:
   "text_overlay": "5 words max, or null if no overlay",
   "platform_primary": "facebook | instagram_feed | instagram_story | both",
   "estimated_audience": "Cold | Warm | Hot",
-  "compliance_note": "Any compliance flag or NMLS #1454510 placement note"
+  "compliance_note": "Any compliance flag or NMLS #[BANKER_NMLS] placement note"
 }
 ```
 
 ---
 
 ## COMPLIANCE LAYER (Non-Negotiable)
-Every ad must include NMLS #1454510 in the ad copy body or caption.
+Every ad must include NMLS #[BANKER_NMLS] in the ad copy body or caption.
 No rate claims. No approval guarantees.
 Soft CTA only — never "apply now" for cold audiences.
 If a real client scenario is referenced, must be framed as illustrative unless written permission obtained.

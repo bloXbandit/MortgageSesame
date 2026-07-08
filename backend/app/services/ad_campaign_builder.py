@@ -6,6 +6,10 @@ and runs the 9-step campaign generation chain via ai_service.
 
 Called by POST /agent/build-campaign.
 All output routes to the Approval Queue — nothing goes live without human review.
+
+NOTE: CAMPAIGN_TEMPLATES below are state-specific (MD/DC examples). Review and
+update suggested_headline, geography, proof examples, and market fields before
+deploying for another state or banker.
 """
 
 import os

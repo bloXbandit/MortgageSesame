@@ -18,8 +18,8 @@ Usage:
         cta_text="Book a Free Call →",
         use_case="purchase",
         flyer_format="social_square",
-        banker_name="Kenneth",
-        banker_nmls="1454510",
+        banker_name="Your Name",
+        banker_nmls="XXXXXX",
     )
     # result = {"path": "...", "url": "..."}
 """

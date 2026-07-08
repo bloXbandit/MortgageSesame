@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
     elevenlabs_agent_voice_name: str = ""
-    agent_persona_name: str = "Kenny"   # what the voice agent calls itself
+    agent_persona_name: str = ""       # what the voice agent calls itself
 
     # SignalWire
     signalwire_account_sid: str = ""
@@ -53,7 +53,9 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from_name: str = "MortgageSesame"
+    smtp_from_name: str = ""
+    campaign_from_name: str = ""       # defaults to banker_name if empty
+    campaign_from_email: str = ""      # defaults to smtp_user if empty
 
     # Social
     instagram_access_token: str = ""
@@ -85,7 +87,7 @@ class Settings(BaseSettings):
     admin_seed_nmls_id: str = ""
 
     # Booking
-    calcom_link: str = "https://cal.com/kmanjo-vzz/home-purchase-consultation"
+    calcom_link: str = ""
 
     # Image generation — AI avatar / flyer creation
     avatar_provider: str = "auto"       # auto | openai | fal | replicate | passthrough
@@ -112,12 +114,12 @@ class Settings(BaseSettings):
     bannerbear_template_story: str = ""
     bannerbear_template_wide_banner: str = ""
 
-    # Banker identity — change these to white-label for another user
-    banker_name: str = "Kenneth"
-    banker_nmls: str = "1454510"
-    app_1003_url: str = "https://2704714.my1003app.com/1454510/register"
-    zillow_url: str = "https://www.zillow.com/lender-profile/kmanjo2/"
-    service_states: str = "Maryland & DC"
+    # Banker identity — must be set in .env for each deployment
+    banker_name: str = ""
+    banker_nmls: str = ""
+    app_1003_url: str = ""
+    zillow_url: str = ""
+    service_states: str = ""
 
     @property
     def cors_origins_list(self) -> List[str]:

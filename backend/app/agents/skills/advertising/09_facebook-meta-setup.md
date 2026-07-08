@@ -197,7 +197,7 @@ When returning a campaign setup block, always include:
     "ad_format": "...",
     "compliance": [
       "Special Ad Category: HOUSING applied",
-      "NMLS #1454510 included",
+      "NMLS #[BANKER_NMLS] included",
       "No guaranteed approval language",
       "Equal Housing Opportunity"
     ]

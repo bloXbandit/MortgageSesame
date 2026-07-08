@@ -1,28 +1,30 @@
 # SKILL: Offer Templates — Mortgage Products
 # Step 1 of 9 — Offer Extraction
+# ⚠️  WHITE-LABEL WARNING: Update THE BANKER section below for each deployment.
+#    These values are NOT env-driven — edit this file before onboarding a new banker.
 
 ## WHEN TO USE
 After identifying the avatar (Step 0), extract the offer for the specific loan product.
 The offer is NOT the product features. The offer is the TRANSFORMATION the prospect gets.
 Outcomes > features. Specificity > hype.
 
-Rule: Every offer must answer "Why this, why now, why Kenneth."
+Rule: Every offer must answer "Why this, why now, why [BANKER_NAME]."
 
 ---
 
 ## THE BANKER
 
-**Name:** Kenneth
-**NMLS:** #1454510
-**Markets:** Maryland & Washington DC
+**Name:** [BANKER_NAME]
+**NMLS:** #[BANKER_NMLS]
+**Markets:** [SERVICE_STATES]
 **Lender Access:** UWM, Rocket, NewRez, and others (wholesale — not retail bank)
 **Close Speed:** As fast as 10 business days
 **Pre-Approval:** Same business day
 **Experience:** 10+ years senior mortgage advisor
 **Rating:** 5-star Zillow verified
 **Lead Gen:** MortgageSesame platform — actively generating buyer leads
-**Cal.com Booking:** https://cal.com/kmanjo-vzz/home-purchase-consultation
-**Application Link (1003):** https://2704714.my1003app.com/1454510/register
+**Cal.com Booking:** [CALCOM_LINK]
+**Application Link (1003):** [APP_1003_URL]
 
 ---
 
