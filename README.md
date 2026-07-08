@@ -56,7 +56,7 @@ MortgageSesame/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.9+
 - Node 20+
 - Git
 

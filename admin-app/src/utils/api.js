@@ -12,11 +12,13 @@ function getBaseUrl() {
   if (typeof window !== 'undefined' && window.electron?.isElectron) {
     return 'http://localhost:8000/api/v1'
   }
-  // iOS / Capacitor — user-configured IP
+  // Env var takes priority (set in .env / deployment config)
+  if (import.meta.env?.VITE_API_URL) return import.meta.env.VITE_API_URL
+  // iOS / Capacitor — user-configured IP (only used when no env var set)
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
   if (stored) return stored
-  // Dev fallback
-  return import.meta.env?.VITE_API_URL || 'http://localhost:8000/api/v1'
+  // Hard fallback
+  return 'http://localhost:8000/api/v1'
 }
 
 export function setApiUrl(url) {

@@ -9,6 +9,7 @@ import structlog
 
 from app.config import settings
 from app.database import engine, Base
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.routers import auth, products, contacts, campaigns, leads, content, approvals, agent
 from app.routers import rates, listings, dpa
 from app.routers import outreach, tracking
@@ -72,6 +73,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
 
 # Routers
 app.include_router(auth.router, prefix="/api/v1")

@@ -45,7 +45,7 @@ BLOCKED_PATTERNS = [
      "Never claim no credit check or no verification."),
     (r"\binstant\s+(approval|loan|pre-?approval)\b", "instant_approval",
      "Avoid 'instant approval' claims. Use 'fast turnaround' or 'quick decision'."),
-    (r"\bi\s+(will\s+pay|am\s+paying|pay)\s+you\s+(for\s+)?(referral|leads?|sending)\b", "referral_fee_language",
+    (r"\bi\s+(will\s+pay|am\s+paying|pay)\s+you\s+(for\s+)?(referrals?|leads?|sending)\b", "referral_fee_language",
      "Never offer to pay for referrals — RESPA violation risk."),
     (r"\b(kickback|referral\s+fee|split\s+(my\s+)?commission)\b", "kickback_language",
      "Referral fee/kickback language is a RESPA violation."),
@@ -56,7 +56,7 @@ BLOCKED_PATTERNS = [
 ]
 
 HIGH_PATTERNS = [
-    (r"\blowest\s+(rate|payment|cost)\s+in\b", "lowest_rate_superlative",
+    (r"\blowest\s+(rates?|payment|cost)\s+in\b", "lowest_rate_superlative",
      "Superlative rate claims require substantiation. Use 'competitive rates' instead."),
     (r"\bact\s+now.{0,20}(rates?\s+are\s+rising|before\s+rates?\s+go\s+up)\b", "false_urgency",
      "Avoid manufactured urgency. Real market conditions should be cited."),

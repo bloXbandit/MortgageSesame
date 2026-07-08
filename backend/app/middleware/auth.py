@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -82,8 +83,8 @@ async def require_agent_key(
 
     token = credentials.credentials
 
-    # 1. Agent key — fast path, no DB hit
-    if token == settings.agent_api_key:
+    # 1. Agent key — timing-safe compare, no DB hit
+    if hmac.compare_digest(token, settings.agent_api_key):
         return True
 
     # 2. Admin JWT — allow admins to read agent endpoints from the UI
