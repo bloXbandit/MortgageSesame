@@ -36,3 +36,15 @@ class AgentAsk(Base):
     resolution  = Column(Text, nullable=True)        # Operator's answer / action taken
     created_at  = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
+
+
+class AgentChatSession(Base):
+    """Conversational marketing concierge state — one row per chat session."""
+    __tablename__ = "agent_chat_sessions"
+
+    id         = Column(String, primary_key=True)    # UUID
+    state      = Column(JSON, default=dict)          # goal, budget, avatar, product, market, proof, material_combo, flyer_id, ...
+    history    = Column(JSON, default=list)          # [{role: user|agent, text, ts}, ...] capped at last ~20
+    status     = Column(String, default="active")    # active | built | closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

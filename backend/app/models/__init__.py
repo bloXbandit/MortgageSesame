@@ -14,6 +14,7 @@ from app.models.outreach import (
     ProspectSource, ProspectType, ScoreGrade, OutreachChannel, OutreachStatus,
     CallTaskStatus, MailTemplate,
 )
+from app.models.partner import Partner
 
 __all__ = [
     "User", "UserRole",
@@ -31,4 +32,5 @@ __all__ = [
     "QRLink", "QREvent", "CallTask", "SuppressionEntry", "ProviderConfig",
     "ProspectSource", "ProspectType", "ScoreGrade", "OutreachChannel", "OutreachStatus",
     "CallTaskStatus", "MailTemplate",
+    "Partner",
 ]

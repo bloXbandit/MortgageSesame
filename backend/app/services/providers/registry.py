@@ -65,13 +65,13 @@ def get_email_provider() -> EmailProvider:
         )
     if name == "sendgrid":
         return SendGridEmailProvider(
-            api_key=os.getenv("SENDGRID_API_KEY", ""),
+            api_key=_settings.sendgrid_api_key,
             from_email=_from_email,
             from_name=_from_name,
         )
     if name == "resend":
         return ResendEmailProvider(
-            api_key=os.getenv("RESEND_API_KEY", ""),
+            api_key=_settings.resend_api_key,
             from_email=_from_email,
             from_name=_from_name,
         )

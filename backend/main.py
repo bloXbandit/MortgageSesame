@@ -15,6 +15,7 @@ from app.routers import rates, listings, dpa
 from app.routers import outreach, tracking
 from app.routers import unsubscribe
 from app.routers import flyers
+from app.routers import partners
 
 log = structlog.get_logger()
 
@@ -51,7 +52,16 @@ async def lifespan(app: FastAPI):
             else:
                 log.info("admin_seed.exists", email=settings.admin_seed_email)
 
+    # Background scheduler — drip sequences, scheduled posts, due callbacks
+    scheduler_task = None
+    if settings.scheduler_enabled:
+        import asyncio
+        from app.services.scheduler import scheduler_loop
+        scheduler_task = asyncio.create_task(scheduler_loop())
+
     yield
+    if scheduler_task:
+        scheduler_task.cancel()
     log.info("MortgageSesame API shutting down")
     await engine.dispose()
 
@@ -91,6 +101,7 @@ app.include_router(outreach.router, prefix="/api/v1")
 app.include_router(tracking.router, prefix="/api/v1")
 app.include_router(tracking.short_router)           # /r/{code} at root for short QR URLs
 app.include_router(flyers.router, prefix="/api/v1")
+app.include_router(partners.router, prefix="/api/v1")
 app.include_router(unsubscribe.router)              # /unsubscribe at root (CAN-SPAM)
 
 

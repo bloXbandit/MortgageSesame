@@ -13,6 +13,7 @@ export function AuthProvider({ children }) {
     setLoading(true)
     try {
       const data = await api.post('/auth/login', { email, password })
+      if (!data?.access_token) throw new Error('Login failed — no token returned')
       localStorage.setItem('ms_token', data.access_token)
       localStorage.setItem('ms_refresh', data.refresh_token)
       localStorage.setItem('ms_user', JSON.stringify(data.user))

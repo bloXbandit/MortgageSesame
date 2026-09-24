@@ -1,3 +1,4 @@
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,12 +7,83 @@ from typing import Optional
 from app.database import get_db
 from app.models.lead import LeadIntake, LeadScore as LeadScoreModel, LoanInterestType, Timeline, CreditScoreRange, IncomeRange, PropertyGoal, PipelineStatus
 from app.models.contact import Contact, ConsentRecord, ConsentStatus, ContactType
+from app.models.outreach import CallTask, CampaignOutreach, OutreachChannel, OutreachStatus
 from app.models.user import User
 from app.services import ai_service
 from app.middleware.audit import log_event
 from app.middleware.auth import get_current_user
+from app.config import settings as _s
 
 router = APIRouter(prefix="/leads", tags=["leads"])
+log = structlog.get_logger()
+
+
+async def _queue_welcome_flow(db: AsyncSession, intake: LeadIntake, contact: Contact):
+    """
+    New lead arrived → (1) priority call task, (2) welcome email draft
+    awaiting approval. Nothing sends — the draft lands in the approval queue.
+    """
+    name = f"{intake.first_name or ''} {intake.last_name or ''}".strip() or "there"
+    goal = (intake.loan_interest_type.value if hasattr(intake.loan_interest_type, "value")
+            else str(intake.loan_interest_type or "home financing")).replace("_", " ")
+
+    task = CallTask(
+        contact_id=contact.id if contact else None,
+        prospect_name=name if name != "there" else None,
+        phone=intake.phone,
+        trigger="form_fill",
+        trigger_detail=f"Intake: {goal} · timeline {intake.timeline or '?'} · {intake.city or ''} {intake.state or ''}".strip(" ·"),
+        priority=2,
+        campaign_context="website_intake",
+    )
+    db.add(task)
+
+    # Welcome email draft — only if they consented to email
+    if contact and contact.email and intake.consent_email and not contact.is_opted_out:
+        from app.routers.unsubscribe import generate_unsubscribe_url
+        unsub = generate_unsubscribe_url(contact.email)
+        booking = _s.calcom_link or "#"
+        banker = _s.banker_name or "your loan officer"
+        nmls = _s.banker_nmls or ""
+
+        body_text = (
+            f"Hi {intake.first_name or 'there'},\n\n"
+            f"Thanks for reaching out about {goal}. I got your info and wanted to "
+            f"personally say hello — I'm {banker}, a local mortgage banker.\n\n"
+            f"If you'd like to talk through your options, grab a time that works "
+            f"for you: {booking}\n\n"
+            f"No pressure either way — I'm here when you're ready.\n\n"
+            f"{banker}\nNMLS #{nmls}\n\n"
+            f"To opt out of future emails: {unsub}"
+        )
+        body_html = (
+            f"<p>Hi {intake.first_name or 'there'},</p>"
+            f"<p>Thanks for reaching out about {goal}. I got your info and wanted to "
+            f"personally say hello — I'm {banker}, a local mortgage banker.</p>"
+            f"<p>If you'd like to talk through your options, "
+            f'<a href="{booking}">grab a time that works for you</a>.</p>'
+            f"<p>No pressure either way — I'm here when you're ready.</p>"
+            f"<p>{banker}<br>NMLS #{nmls}</p>"
+            f'<p style="font-size:11px;color:#888">To opt out of future emails, '
+            f'<a href="{unsub}">click here</a>.</p>'
+        )
+        draft = CampaignOutreach(
+            contact_id=contact.id,
+            channel=OutreachChannel.EMAIL,
+            step_number=1,
+            status=OutreachStatus.DRAFT,
+            approval_status="pending",
+            template_name="intake_welcome",
+            subject=f"Good to meet you, {intake.first_name or 'there'}",
+            body_text=body_text,
+            body_html=body_html,
+            merge_data={"lead_intake_id": intake.id, "source": "auto_enroll"},
+        )
+        db.add(draft)
+
+    await db.commit()
+    log.info("lead.welcome_queued", intake_id=intake.id,
+             call_task=True, welcome_email=bool(intake.consent_email and contact and contact.email))
 
 
 class IntakeSubmit(BaseModel):
@@ -142,6 +214,13 @@ async def submit_intake(data: IntakeSubmit, request: Request, db: AsyncSession =
         pass
 
     await db.commit()
+
+    # ── Auto-enroll: hot-lead call task + welcome draft (approval-gated) ─────
+    try:
+        await _queue_welcome_flow(db, intake, contact)
+    except Exception as e:
+        log.error("lead.welcome_flow_failed", intake_id=intake.id, error=str(e))
+
     await log_event(db, "lead.intake_submit", actor_type="public", resource_type="lead_intake", resource_id=intake.id,
                     ip_address=request.client.host)
     await db.commit()

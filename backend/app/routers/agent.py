@@ -24,7 +24,9 @@ from app.services.integrations.elevenlabs import generate_audio
 from app.middleware.auth import require_agent_key
 from app.middleware.audit import log_event
 from app.models.agent_memory import AgentMemoryLog, AgentAsk
+from app.models.meta_ads import MetaAdPublish  # registers table for create_all
 import json
+import os
 import httpx
 
 router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(require_agent_key)])
@@ -696,6 +698,74 @@ async def get_campaign_templates():
     }
 
 
+# ── GET /agent/materials ────────────────────────────────────────────────────
+@router.get("/materials")
+async def get_materials(db: AsyncSession = Depends(get_db)):
+    """
+    Inventory of creative materials the agent can source for campaigns:
+    reference face photo, completed flyers, generated videos, voice assets,
+    campaign templates, and provider mode switches.
+
+    The agent should call this BEFORE proposing a campaign so recommendations
+    reuse what exists (flyers, videos, voice) and prompt the operator to upload
+    anything missing (e.g. reference face photo for likeness).
+    """
+    from app.services.marketing_concierge import get_materials_snapshot
+
+    snapshot = await get_materials_snapshot(db)
+    snapshot["reference_photo"]["note"] = (
+        "Required for likeness-based flyers and avatar-style creative. "
+        "If not uploaded, prompt the operator to add one in Content Studio → Flyers."
+    )
+    snapshot["material_combos"] = ["static", "video", "voice_graphic", "full_stack", "repurpose"]
+    snapshot["note"] = (
+        "Reuse existing materials first. Only generate new flyers/videos when the "
+        "scenario needs a fresh angle. Video costs provider credits — static flyers are free."
+    )
+    return snapshot
+
+
+# ── POST /agent/chat ────────────────────────────────────────────────────────
+class ChatRequest(BaseModel):
+    """
+    Conversational marketing concierge. Multi-turn: pass the returned session_id
+    on every subsequent message to keep state (goal, budget, avatar, product, ...).
+
+    The concierge discovers needs, checks /agent/materials, proposes scenarios with
+    plain-English trade-offs, and only calls build-campaign when the operator
+    explicitly confirms with complete state.
+    """
+    message: str
+    session_id: Optional[str] = None
+
+
+@router.post("/chat")
+async def agent_chat(data: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """
+    One turn of the marketing concierge conversation.
+
+    Returns: session_id (persist this), reply (plain English), action
+    (continue | build), state, missing (fields still needed), and build_result
+    when a campaign was actually generated.
+    """
+    from app.services.marketing_concierge import chat
+
+    if not data.message or not data.message.strip():
+        raise HTTPException(status_code=422, detail="message is required")
+
+    result = await chat(db=db, message=data.message.strip(), session_id=data.session_id)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    await log_event(db, "agent.chat", actor_type="agent",
+                    resource_type="chat_session", resource_id=result["session_id"],
+                    details={"action": result.get("action"), "message_len": len(data.message)})
+    await db.commit()
+
+    return result
+
+
 # ── POST /agent/build-campaign ─────────────────────────────────────────────
 class BuildCampaignRequest(BaseModel):
     """
@@ -711,6 +781,10 @@ class BuildCampaignRequest(BaseModel):
     flyer_id:             (optional) ID of a completed GeneratedFlyer to use as visual creative
     reference_page_slug:  (optional) Existing CampaignPage slug — pulls headline/proof and uses
                           as inspiration context so the new campaign builds on proven copy.
+    material_combo:       static | video | voice_graphic | full_stack | repurpose —
+                          which creative materials to assemble. video/full_stack submit a
+                          HeyGen avatar video render (async) from the winning ad angle.
+    video_aspect_ratio:   (optional) 9:16 | 1:1 — overrides auto-detection from template placements.
     """
     template_id: Optional[str] = None
     avatar: Optional[str] = None
@@ -720,6 +794,8 @@ class BuildCampaignRequest(BaseModel):
     budget_hint: str = "low"
     flyer_id: Optional[int] = None
     reference_page_slug: Optional[str] = None
+    material_combo: str = "static"
+    video_aspect_ratio: Optional[str] = None
 
 
 @router.post("/build-campaign")
@@ -765,6 +841,8 @@ async def build_campaign(data: BuildCampaignRequest, db: AsyncSession = Depends(
         flyer_image_url=flyer_image_url,
         template_id=data.template_id,
         reference_page_slug=data.reference_page_slug,
+        material_combo=data.material_combo,
+        video_aspect_ratio=data.video_aspect_ratio,
     )
 
     if "error" in result:
@@ -776,6 +854,331 @@ async def build_campaign(data: BuildCampaignRequest, db: AsyncSession = Depends(
         result["template_used"] = data.template_id
 
     return result
+
+
+# ── POST /agent/meta-token-exchange ──────────────────────────────────────────
+class MetaTokenExchangeRequest(BaseModel):
+    """Exchange a short-lived Meta user token for a 60-day one. Requires FB_APP_ID + FB_APP_SECRET in env."""
+    token: Optional[str] = None   # defaults to current META_ADS_ACCESS_TOKEN
+
+
+@router.post("/meta-token-exchange")
+async def meta_token_exchange(data: MetaTokenExchangeRequest):
+    """
+    Extends a Meta token from ~1 hour to ~60 days. Pass a fresh short-lived token,
+    or omit to re-exchange the current META_ADS_ACCESS_TOKEN.
+    Returns the long-lived token — paste it into .env and restart the backend.
+    """
+    from app.services.token_refresh import exchange_meta_token
+    tok = data.token or os.getenv("META_ADS_ACCESS_TOKEN", "")
+    if not tok:
+        raise HTTPException(status_code=422, detail="No token provided and META_ADS_ACCESS_TOKEN not set")
+    result = await exchange_meta_token(tok)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+
+# ── GET /agent/meta-ads-status ───────────────────────────────────────────────
+@router.get("/meta-ads-status")
+async def meta_ads_status():
+    """
+    Read-only Meta Marketing API check: is the ad account configured and reachable?
+    Safe to call anytime — creates nothing, spends nothing.
+    """
+    from app.services.providers import meta_ads
+    return await meta_ads.check_connection()
+
+
+# ── POST /agent/publish-campaign-meta ────────────────────────────────────────
+class PublishCampaignMetaRequest(BaseModel):
+    """
+    Push a generated campaign to Meta Ads Manager.
+
+    campaign_page_slug:     CampaignPage slug from a build-campaign run — supplies
+                            ad copy units + flyer image + landing page URL.
+    template_id:            (optional) template slug — supplies the Facebook targeting
+                            block (geography/interests/budget/placements).
+    facebook_setup:         (optional) explicit targeting block — overrides template.
+    ad_angle_index:         which of the 3 generated ad angles to publish (0–2).
+    daily_budget_dollars:   (optional) override the template's budget_daily.
+    activate:               False (default) → everything created PAUSED; operator
+                            resumes in Ads Manager or republishes with activate=true.
+    """
+    campaign_page_slug: str
+    template_id: Optional[str] = None
+    facebook_setup: Optional[dict] = None
+    ad_angle_index: int = 0
+    daily_budget_dollars: Optional[float] = None
+    activate: bool = False
+
+
+@router.post("/publish-campaign-meta")
+async def publish_campaign_meta(data: PublishCampaignMetaRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Wire a generated campaign into Meta: Campaign (HOUSING) → Ad Set (targeting +
+    budget) → Image → Creative → Ad. Default is PAUSED — zero spend until the
+    operator activates.
+
+    Without META_AD_ACCOUNT_ID / META_ADS_ACCESS_TOKEN this runs as a DRY RUN:
+    payloads are built and returned but nothing is sent to Meta.
+    """
+    from app.models.campaign import CampaignPage
+    from app.models.meta_ads import MetaAdPublish
+    from app.services.ad_campaign_builder import CAMPAIGN_TEMPLATES
+    from app.services.providers import meta_ads
+
+    # 1. Source campaign page
+    page = (await db.execute(
+        select(CampaignPage).where(CampaignPage.slug == data.campaign_page_slug)
+    )).scalar_one_or_none()
+    if not page:
+        raise HTTPException(status_code=404, detail=f"Campaign page '{data.campaign_page_slug}' not found")
+
+    ad_units = page.ad_units or []
+    if not ad_units:
+        raise HTTPException(status_code=422, detail="Campaign page has no ad units to publish")
+    if data.ad_angle_index < 0 or data.ad_angle_index >= len(ad_units):
+        raise HTTPException(status_code=422, detail=f"ad_angle_index must be 0–{len(ad_units)-1}")
+    ad_unit = ad_units[data.ad_angle_index]
+
+    # 2. Targeting block: explicit > template
+    facebook_setup = data.facebook_setup
+    if not facebook_setup and data.template_id:
+        facebook_setup = CAMPAIGN_TEMPLATES.get(data.template_id, {}).get("facebook")
+    if not facebook_setup:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide template_id (for its Facebook targeting block) or an explicit facebook_setup object.",
+        )
+
+    # 3. Destination link + creative
+    link_url = f"{_settings.public_site_url}/campaign/{page.slug}"
+    page_id = os.getenv("META_PAGE_ID", "")
+
+    name = f"{page.avatar or 'campaign'} × {page.product or 'mortgage'} — {page.slug[:30]} — angle {data.ad_angle_index + 1}"
+
+    budget_cents = int(data.daily_budget_dollars * 100) if data.daily_budget_dollars else None
+
+    pub = await meta_ads.publish_campaign(
+        name=name,
+        facebook_setup=facebook_setup,
+        ad_unit=ad_unit,
+        page_id=page_id,
+        link_url=link_url,
+        image_url=page.flyer_image_url,
+        daily_budget_override=budget_cents,
+        activate=data.activate,
+    )
+
+    # 4. Persist publish state
+    record = MetaAdPublish(
+        campaign_page_slug=page.slug,
+        run_id=page.run_id,
+        template_id=data.template_id,
+        ad_angle_index=data.ad_angle_index,
+        facebook_setup=facebook_setup,
+        ad_unit=ad_unit,
+        meta_campaign_id=pub.campaign_id,
+        meta_adset_id=pub.adset_id,
+        meta_creative_id=pub.creative_id,
+        meta_ad_id=pub.ad_id,
+        status="dry_run" if pub.dry_run else ("active" if data.activate and pub.success else ("paused" if pub.success else "failed")),
+        dry_run=pub.dry_run,
+        error=pub.error,
+    )
+    db.add(record)
+
+    await log_event(db, "agent.meta_publish", actor_type="agent",
+                    resource_type="meta_ad_publish", resource_id=record.id,
+                    details={"slug": page.slug, "dry_run": pub.dry_run,
+                             "success": pub.success, "activate": data.activate})
+    await db.commit()
+
+    if not pub.success and not pub.dry_run:
+        return {
+            "success": False,
+            "publish_id": record.id,
+            "error": pub.error,
+            "steps": pub.steps,
+            "note": "Partial objects may exist in the ad account — check Ads Manager before retrying.",
+        }
+
+    return {
+        "success": True,
+        "publish_id": record.id,
+        "dry_run": pub.dry_run,
+        "status": record.status,
+        "meta_ids": {
+            "campaign": pub.campaign_id,
+            "adset":    pub.adset_id,
+            "creative": pub.creative_id,
+            "ad":       pub.ad_id,
+        },
+        "steps": pub.steps,
+        "payloads": pub.payloads if pub.dry_run else None,
+        "ads_manager_url": f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={os.getenv('META_AD_ACCOUNT_ID', '').replace('act_', '')}" if not pub.dry_run else None,
+        "note": (
+            "DRY RUN — set META_AD_ACCOUNT_ID + META_ADS_ACCESS_TOKEN to publish for real. "
+            "Payloads show exactly what would be sent."
+            if pub.dry_run else
+            ("Campaign is ACTIVE and spending." if data.activate else
+             "Campaign created PAUSED — resume it in Ads Manager (or republish with activate=true) when ready.")
+        ),
+    }
+
+
+# ── GET /agent/meta-ads-performance ──────────────────────────────────────────
+@router.get("/meta-ads-performance")
+async def meta_ads_performance(date_preset: str = "last_7d", db: AsyncSession = Depends(get_db)):
+    """
+    "How's my ad doing?" — per-campaign performance for everything published
+    through this system, plus totals.
+
+    date_preset: today | yesterday | last_3d | last_7d | last_14d | last_30d | lifetime
+    """
+    from app.services.providers import meta_ads
+
+    rows = (await db.execute(
+        select(MetaAdPublish)
+        .where(MetaAdPublish.dry_run == False, MetaAdPublish.meta_campaign_id.isnot(None))
+        .order_by(MetaAdPublish.created_at.desc())
+    )).scalars().all()
+
+    seen, campaigns = set(), []
+    for r in rows:
+        if r.meta_campaign_id in seen:
+            continue
+        seen.add(r.meta_campaign_id)
+        ins = await meta_ads.get_campaign_insights(r.meta_campaign_id, date_preset)
+        ins["publish_id"]     = r.id
+        ins["slug"]           = r.campaign_page_slug
+        ins["publish_status"] = r.status
+        campaigns.append(ins)
+
+    live = [c for c in campaigns if not c.get("error")]
+    totals = {
+        "spend":       round(sum(c.get("spend", 0) for c in live), 2),
+        "impressions": sum(c.get("impressions", 0) for c in live),
+        "clicks":      sum(c.get("clicks", 0) for c in live),
+        "results":     sum(c.get("results", 0) for c in live),
+    }
+    totals["cost_per_result"] = round(totals["spend"] / totals["results"], 2) if totals["results"] else None
+
+    return {
+        "date_preset": date_preset,
+        "campaigns":   campaigns,
+        "totals":      totals,
+        "note": "result_type 'landing_page_view' means no pixel/lead event yet — "
+                "cost_per_result is cost per landing page view until a lead event exists.",
+    }
+
+
+# ── POST /agent/meta-ads-guard ───────────────────────────────────────────────
+class MetaAdsGuardRequest(BaseModel):
+    """
+    CPL watchdog. Checks every ACTIVE published campaign and pauses the ones
+    burning money.
+
+    max_cpl_dollars:    pause if cost per result exceeds this
+    min_spend_dollars:  don't judge a campaign until it has spent at least this
+    date_preset:        window to judge on (default last_3d)
+    auto_pause:         False → report only. True → actually PAUSE breaching campaigns.
+    """
+    max_cpl_dollars: float = 50.0
+    min_spend_dollars: float = 30.0
+    date_preset: str = "last_3d"
+    auto_pause: bool = False
+
+
+@router.post("/meta-ads-guard")
+async def meta_ads_guard(data: MetaAdsGuardRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Rule: spend >= min_spend AND (zero results OR cost_per_result > max_cpl) → breach.
+    Breaching campaigns are flagged, and PAUSED when auto_pause=true.
+    """
+    from app.services.providers import meta_ads
+
+    rows = (await db.execute(
+        select(MetaAdPublish)
+        .where(MetaAdPublish.dry_run == False, MetaAdPublish.meta_campaign_id.isnot(None))
+        .order_by(MetaAdPublish.created_at.desc())
+    )).scalars().all()
+
+    seen, verdicts = set(), []
+    for r in rows:
+        if r.meta_campaign_id in seen:
+            continue
+        seen.add(r.meta_campaign_id)
+
+        ins = await meta_ads.get_campaign_insights(r.meta_campaign_id, data.date_preset)
+        if ins.get("error"):
+            verdicts.append({"campaign_id": r.meta_campaign_id, "slug": r.campaign_page_slug,
+                             "verdict": "error", "detail": ins["error"]})
+            continue
+
+        spend   = ins.get("spend", 0)
+        results = ins.get("results", 0)
+        cpr     = ins.get("cost_per_result")
+
+        if spend < data.min_spend_dollars:
+            verdict = "too_early"
+        elif results == 0 or (cpr is not None and cpr > data.max_cpl_dollars):
+            verdict = "breach"
+        else:
+            verdict = "ok"
+
+        entry = {
+            "campaign_id":     r.meta_campaign_id,
+            "slug":            r.campaign_page_slug,
+            "spend":           spend,
+            "results":         results,
+            "result_type":     ins.get("result_type"),
+            "cost_per_result": cpr,
+            "verdict":         verdict,
+        }
+
+        if verdict == "breach" and data.auto_pause and r.status == "active":
+            res = await meta_ads.set_campaign_status(r.meta_campaign_id, "PAUSED")
+            entry["action"] = "paused" if res.get("success") else f"pause_failed: {res.get('error')}"
+            if res.get("success"):
+                r.status = "paused"
+                db.add(r)
+        elif verdict == "breach":
+            entry["action"] = "flagged (auto_pause=false)"
+
+        verdicts.append(entry)
+
+    if data.auto_pause:
+        await db.commit()
+
+    await log_event(db, "agent.meta_guard", actor_type="agent",
+                    details={"breaches": sum(1 for v in verdicts if v.get("verdict") == "breach"),
+                             "auto_pause": data.auto_pause,
+                             "max_cpl": data.max_cpl_dollars,
+                             "min_spend": data.min_spend_dollars})
+    await db.commit()
+
+    return {
+        "rule": f"pause when spend >= ${data.min_spend_dollars} and (0 results or cost/result > ${data.max_cpl_dollars}) over {data.date_preset}",
+        "auto_pause": data.auto_pause,
+        "campaigns_checked": len(verdicts),
+        "verdicts": verdicts,
+    }
+
+
+async def _resolve_logo_path(db, logo_asset_id):
+    """BrandAsset id → validated local file path (or None). Raises 404/400 on bad input."""
+    if not logo_asset_id:
+        return None
+    from pathlib import Path as _P
+    from app.models.flyer import BrandAsset as _BA
+    asset = (await db.execute(select(_BA).where(_BA.id == logo_asset_id))).scalar_one_or_none()
+    if not asset:
+        raise HTTPException(404, f"logo_asset_id {logo_asset_id} not found. GET /flyers/assets to list.")
+    if not asset.image_path or not _P(asset.image_path).exists():
+        raise HTTPException(400, f"Asset '{asset.name}' file missing on disk")
+    return asset.image_path
 
 
 class FlyerToCampaignRequest(BaseModel):
@@ -794,6 +1197,10 @@ class FlyerToCampaignRequest(BaseModel):
     cta_text: Optional[str] = "Book a Free Call →"
     style_preset: Optional[str] = "suit_headshot"
     skip_ai: bool = False
+    theme: Optional[str] = "midnight_gold"   # midnight_gold | ocean | forest | plum | slate_ember
+    brand_name: Optional[str] = None         # flyer brand label; defaults to FLYER_BRAND_NAME env
+    logo_asset_id: Optional[int] = None      # BrandAsset id — partner logo composited into footer
+    logo_label: Optional[str] = None         # text before the logo, e.g. "Powered by"
     # Campaign params — template_id fills defaults; avatar/product override if provided
     template_id: Optional[str] = None
     avatar: Optional[str] = None
@@ -848,6 +1255,10 @@ async def flyer_to_campaign(data: FlyerToCampaignRequest, db: AsyncSession = Dep
         subheadline=data.subheadline or "",
         cta_text=data.cta_text or "",
         flyer_format=data.flyer_format,
+        theme=data.theme,
+        brand_name=data.brand_name,
+        logo_path=await _resolve_logo_path(db, data.logo_asset_id),
+        logo_label=data.logo_label,
     )
 
     # Save flyer record
@@ -1134,12 +1545,24 @@ class AgentFlyerRequest(BaseModel):
     """
     use_case: str = "purchase"
     flyer_format: str = "social_square"
-    headline: str
+    headline: Optional[str] = None           # required unless source_flyer_id is set
     subheadline: Optional[str] = ""
     cta_text: Optional[str] = "Book a Free Call →"
     style_preset: Optional[str] = "suit_headshot"
     style_prompt_override: Optional[str] = None
     skip_ai: bool = False
+    theme: Optional[str] = "midnight_gold"   # midnight_gold | ocean | forest | plum | slate_ember
+    avatar_id: Optional[int] = None          # reuse a SavedAvatar from the library (skips AI generation)
+    source_flyer_id: Optional[int] = None    # revise: inherit copy/format/theme from this flyer, override only what's passed
+    brand_name: Optional[str] = None         # flyer brand label; defaults to FLYER_BRAND_NAME env
+    logo_asset_id: Optional[int] = None      # BrandAsset id — partner logo composited into footer (GET /flyers/assets)
+    logo_label: Optional[str] = None         # text before the logo, e.g. "Powered by"
+    # ── Data-rich layouts (flyer_layouts.py) ─────────────────────────────────
+    layout: Optional[str] = "promo"          # promo | listing | open_house | program | comparison | lifestyle | rate_update | testimonial | just_funded | steps
+    layout_data: Optional[dict] = None       # structured content per layout (benefits[], rows[], quote, steps[], ...)
+    listing_id: Optional[str] = None         # auto-fills listing layouts: address/price/specs/photo/realtor + live payment scenarios
+    hero_asset_id: Optional[int] = None      # BrandAsset id used as the lead photo (property/lifestyle/upload)
+    partner_id: Optional[str] = None         # Partner id — co-marketing block (name/brokerage/phone/headshot/logo). GET /partners?search=
 
 
 @router.post("/build-flyer")
@@ -1149,26 +1572,236 @@ async def agent_build_flyer(data: AgentFlyerRequest, db: AsyncSession = Depends(
     Runs synchronously (blocks until complete) so the agent gets the result immediately.
     Returns flyer_id, status, and URLs when done.
     """
-    from app.models.flyer import GeneratedFlyer, ReferencePhoto
+    from app.models.flyer import GeneratedFlyer, ReferencePhoto, SavedAvatar
     from app.services.avatar_generator import generate_avatar, get_style_preset, _passthrough
     from app.services.flyer_builder import build_flyer
     from sqlalchemy import select
+    from pathlib import Path as _Path
 
-    # Check reference photo
-    ref = (await db.execute(select(ReferencePhoto).limit(1))).scalar_one_or_none()
-    if not ref or not ref.file_path:
-        raise HTTPException(400, "No reference photo uploaded. Have the operator POST /flyers/reference-photo first.")
+    # ── Revision mode — inherit everything from a previous flyer, override only
+    #    the fields the agent explicitly passed in this request ─────────────────
+    provided = data.model_dump(exclude_unset=True)
+    params = {
+        "use_case": data.use_case, "flyer_format": data.flyer_format,
+        "headline": data.headline, "subheadline": data.subheadline,
+        "cta_text": data.cta_text, "theme": data.theme,
+    }
+    source_avatar_path = None
+    source_avatar_url = None
+    layout = (data.layout or "promo").lower()
+    layout_data = dict(data.layout_data or {})
+    src = None
+    if data.source_flyer_id:
+        src = (await db.execute(select(GeneratedFlyer).where(GeneratedFlyer.id == data.source_flyer_id))).scalar_one_or_none()
+        if not src:
+            raise HTTPException(404, f"source_flyer_id {data.source_flyer_id} not found")
+        inherited = {"use_case": src.use_case, "flyer_format": src.flyer_format,
+                     "headline": src.headline, "subheadline": src.subheadline,
+                     "cta_text": src.cta_text, "theme": params["theme"]}
+        for k in inherited:
+            if k not in provided:
+                params[k] = inherited[k]
+        # Inherit layout + its structured content; explicit request keys win
+        if "layout" not in provided and src.layout:
+            layout = src.layout
+        if src.layout_data:
+            layout_data = {**src.layout_data, **layout_data}
+        # Reuse the source flyer's avatar unless a new style/avatar was requested
+        if ("style_preset" not in provided and "style_prompt_override" not in provided
+                and not data.avatar_id and src.avatar_image_path and _Path(src.avatar_image_path).exists()):
+            source_avatar_path = src.avatar_image_path
+            source_avatar_url = src.avatar_image_url
+
+    if layout == "promo" and not params["headline"]:
+        raise HTTPException(422, "headline is required (or pass source_flyer_id to inherit one)")
 
     style_prompt = data.style_prompt_override or get_style_preset(data.style_preset or "suit_headshot")
 
+    # ── Avatar source resolution: library > source flyer > AI generation ──────
+    saved = None
+    if data.avatar_id:
+        saved = (await db.execute(select(SavedAvatar).where(SavedAvatar.id == data.avatar_id))).scalar_one_or_none()
+        if not saved:
+            raise HTTPException(404, f"avatar_id {data.avatar_id} not in library. GET /flyers/avatars to list.")
+        if not saved.image_path or not _Path(saved.image_path).exists():
+            raise HTTPException(400, f"Saved avatar '{saved.name}' file missing on disk")
+
+    logo_path = await _resolve_logo_path(db, data.logo_asset_id)
+
+    # ── Data-rich layouts: real photos lead, avatar becomes a contact chip ─────
+    if layout != "promo":
+        from app.services.flyer_layouts import LAYOUT_MAP, build_layout_flyer
+        import asyncio as _asyncio
+        if layout not in LAYOUT_MAP:
+            raise HTTPException(422, f"Unknown layout '{layout}'. Valid: promo, {', '.join(sorted(LAYOUT_MAP.keys()))}")
+
+        layout_fields = {
+            "listing": {"address", "city_state", "price", "beds", "baths", "sqft", "scenarios", "as_of", "realtor", "disclaimer_line", "headline", "subheadline", "cta_text", "listing_id"},
+            "open_house": {"banner", "address", "city_state", "date_line", "time_line", "price", "note", "realtor", "headline", "subheadline"},
+            "program": {"headline", "subheadline", "highlight", "benefits", "realtor"},
+            "comparison": {"headline", "left_title", "right_title", "rows", "banner", "realtor"},
+            "lifestyle": {"headline", "headline_lines", "subheadline", "cta_text"},
+            "rate_update": {"headline", "as_of", "rates", "note", "realtor"},
+            "testimonial": {"headline", "quote", "author", "context", "realtor"},
+            "just_funded": {"headline", "badge", "address", "stat_line", "realtor"},
+            "steps": {"headline", "steps", "cta_text"},
+        }
+        unsupported = sorted(
+            key for key in layout_data
+            if key not in layout_fields.get(layout, set())
+            and not key.startswith("_")
+        )
+        if unsupported:
+            raise HTTPException(
+                422,
+                {"message": f"Unsupported layout_data fields for '{layout}'", "fields": unsupported,
+                 "hint": "Use benefits[] with layout='program'; rows[] with layout='comparison'; "
+                         "layout='lifestyle' accepts headline_lines[], subheadline, and cta_text."},
+            )
+
+        # Chip: saved avatar > source flyer avatar > reference photo — no AI roll
+        chip_path = None
+        if saved:
+            chip_path = saved.image_path
+            saved.times_used = (saved.times_used or 0) + 1
+        elif source_avatar_path:
+            chip_path = source_avatar_path
+        else:
+            _ref = (await db.execute(select(ReferencePhoto).limit(1))).scalar_one_or_none()
+            if _ref and _ref.file_path and _Path(_ref.file_path).exists():
+                chip_path = _ref.file_path
+
+        # Hero photo: explicit asset > listing photo
+        hero_path = None
+        if data.hero_asset_id:
+            from app.models.flyer import BrandAsset as _BA2
+            _ha = (await db.execute(select(_BA2).where(_BA2.id == data.hero_asset_id))).scalar_one_or_none()
+            if not _ha:
+                raise HTTPException(404, f"hero_asset_id {data.hero_asset_id} not found. GET /flyers/assets to list.")
+            hero_path = _ha.image_path
+
+        # Listing autofill — address/specs/price/photo/realtor + live payment scenarios
+        if data.listing_id or layout_data.get("listing_id"):
+            from app.models.hub import Listing, RateSnapshot as _RS
+            from app.services.calculator import CalcInput, calc_scenarios
+            from sqlalchemy import desc as _desc
+            lid = data.listing_id or layout_data.get("listing_id")
+            listing = (await db.execute(select(Listing).where(Listing.id == lid))).scalar_one_or_none()
+            if not listing:
+                raise HTTPException(404, f"listing_id {lid} not found")
+            snap = (await db.execute(select(_RS).order_by(_desc(_RS.snapshot_date)).limit(1))).scalar_one_or_none()
+            calc = calc_scenarios(CalcInput(
+                purchase_price=listing.list_price,
+                annual_taxes=listing.annual_taxes,
+                annual_insurance=listing.annual_insurance,
+                hoa_monthly=listing.hoa_monthly or 0,
+                rate_conventional=(snap.rate_conventional_30 if snap and snap.rate_conventional_30 else 7.0),
+                rate_fha=(snap.rate_fha_30 if snap and snap.rate_fha_30 else 6.75),
+                down_pct_conventional=listing.override_down_pct_conventional or 5.0,
+                down_pct_fha=listing.override_down_pct_fha or 3.5,
+            ))
+            wanted = ("Conventional 5%", "FHA")
+            scenarios = [s for s in calc["scenarios"] if s["loan_type"] in wanted]
+            autofill = {
+                "address": listing.address,
+                "city_state": ", ".join(x for x in [listing.city, f"{listing.state} {listing.zip_code or ''}".strip()] if x),
+                "price": listing.list_price,
+                "beds": listing.bedrooms, "baths": listing.bathrooms, "sqft": listing.sqft,
+                "scenarios": scenarios,
+                "as_of": (snap.snapshot_date if snap else datetime.utcnow().strftime("%Y-%m-%d")),
+                "realtor": {"name": listing.listing_agent_name, "phone": listing.listing_agent_phone,
+                            "company": None} if listing.listing_agent_name else None,
+            }
+            for k, v in autofill.items():
+                layout_data.setdefault(k, v)
+            layout_data.setdefault("listing_id", lid)
+            if not hero_path and listing.photo_url:
+                hero_path = listing.photo_url
+
+        # Partner co-marketing — explicit partner_id wins over the listing's
+        # freeform agent fields; also supplies their logo when none was passed
+        if data.partner_id:
+            from app.models.partner import Partner
+            partner = (await db.execute(
+                select(Partner).where(Partner.id == data.partner_id))).scalar_one_or_none()
+            if not partner:
+                raise HTTPException(404, f"partner_id {data.partner_id} not found. GET /partners to list.")
+            layout_data["realtor"] = {
+                "name": partner.name,
+                "phone": partner.phone,
+                "company": partner.brokerage,
+                "headshot_url": partner.headshot_url,
+                "license": partner.license_number,
+            }
+            if partner.logo_asset_id and not data.logo_asset_id:
+                try:
+                    logo_path = await _resolve_logo_path(db, int(partner.logo_asset_id))
+                except (ValueError, TypeError):
+                    pass  # non-numeric asset ref — skip logo rather than fail the build
+
+        # Persist the resolved hero so revisions keep the photo
+        if hero_path:
+            layout_data["_hero_path"] = hero_path
+        else:
+            hero_path = layout_data.get("_hero_path")
+
+        # Carry basic copy into the payload
+        for k in ("headline", "subheadline", "cta_text"):
+            if params.get(k) and k not in layout_data:
+                layout_data[k] = params[k]
+
+        flyer = GeneratedFlyer(
+            use_case=params["use_case"], flyer_format="portrait_1080x1350",
+            layout=layout, layout_data=layout_data,
+            headline=layout_data.get("headline") or layout_data.get("address") or layout,
+            subheadline=layout_data.get("subheadline"), cta_text=layout_data.get("cta_text"),
+            avatar_image_path=chip_path, provider="layout",
+            status="pending", created_by="agent",
+        )
+        db.add(flyer)
+        await db.flush()
+
+        loop = _asyncio.get_event_loop()
+        try:
+            flyer_result = await loop.run_in_executor(None, lambda: build_layout_flyer(
+                layout=layout, payload=layout_data, theme=params["theme"],
+                brand_name=data.brand_name, avatar_path=chip_path,
+                hero_path=hero_path, logo_path=logo_path, logo_label=data.logo_label,
+            ))
+        except Exception as exc:
+            flyer.status = "failed"
+            flyer.error = str(exc)
+            await db.commit()
+            raise HTTPException(500, f"Layout render failed: {exc}")
+
+        flyer.flyer_image_path = flyer_result["path"]
+        flyer.flyer_image_url = flyer_result["url"]
+        flyer.status = "complete"
+        await db.commit()
+        await log_event(db, "agent.flyer_built", actor_type="agent",
+                        details={"flyer_id": flyer.id, "layout": layout,
+                                 "listing_id": data.listing_id, "source_flyer_id": data.source_flyer_id})
+        await db.commit()
+        return {
+            "flyer_id": flyer.id, "status": "complete",
+            "flyer_url": flyer_result["url"], "layout": layout,
+            "revised_from": data.source_flyer_id,
+        }
+
+    ref = None
+    if not saved and not source_avatar_path:
+        ref = (await db.execute(select(ReferencePhoto).limit(1))).scalar_one_or_none()
+        if not ref or not ref.file_path:
+            raise HTTPException(400, "No reference photo uploaded. Have the operator POST /flyers/reference-photo first.")
+
     # Create DB record
     flyer = GeneratedFlyer(
-        use_case=data.use_case,
-        flyer_format=data.flyer_format,
+        use_case=params["use_case"],
+        flyer_format=params["flyer_format"],
         avatar_style=style_prompt,
-        headline=data.headline,
-        subheadline=data.subheadline,
-        cta_text=data.cta_text,
+        headline=params["headline"],
+        subheadline=params["subheadline"],
+        cta_text=params["cta_text"],
         status="pending",
         created_by="agent",
     )
@@ -1176,36 +1809,46 @@ async def agent_build_flyer(data: AgentFlyerRequest, db: AsyncSession = Depends(
     await db.flush()
     flyer_id = flyer.id
 
-    # Avatar generation
-    if data.skip_ai:
-        avatar_result = await _passthrough(ref.file_path)
+    # Avatar acquisition
+    if saved:
+        avatar_path, avatar_url, avatar_provider = saved.image_path, saved.image_url, saved.source
+        saved.times_used = (saved.times_used or 0) + 1
+    elif source_avatar_path:
+        avatar_path, avatar_url, avatar_provider = source_avatar_path, source_avatar_url, "reused"
     else:
-        avatar_result = await generate_avatar(
-            reference_photo_path=ref.file_path,
-            style_prompt=style_prompt,
-            output_size={"social_square": "square_hd", "story": "story",
-                         "facebook_banner": "landscape", "wide_banner": "landscape"}.get(data.flyer_format, "square_hd"),
-        )
+        if data.skip_ai:
+            avatar_result = await _passthrough(ref.file_path)
+        else:
+            avatar_result = await generate_avatar(
+                reference_photo_path=ref.file_path,
+                style_prompt=style_prompt,
+                output_size={"social_square": "square_hd", "story": "story",
+                             "facebook_banner": "landscape", "wide_banner": "landscape"}.get(params["flyer_format"], "square_hd"),
+            )
+        if not avatar_result.success:
+            flyer.status = "failed"
+            flyer.error = avatar_result.error
+            await db.commit()
+            raise HTTPException(500, f"Avatar generation failed: {avatar_result.error}")
+        avatar_path, avatar_url, avatar_provider = avatar_result.image_path, avatar_result.image_url, avatar_result.provider
 
-    if not avatar_result.success:
-        flyer.status = "failed"
-        flyer.error = avatar_result.error
-        await db.commit()
-        raise HTTPException(500, f"Avatar generation failed: {avatar_result.error}")
-
-    flyer.avatar_image_path = avatar_result.image_path
-    flyer.avatar_image_url = avatar_result.image_url
-    flyer.provider = avatar_result.provider
+    flyer.avatar_image_path = avatar_path
+    flyer.avatar_image_url = avatar_url
+    flyer.provider = avatar_provider
     flyer.status = "avatar_ready"
     await db.flush()
 
     # Flyer compositing
     flyer_result = build_flyer(
-        avatar_image_path=avatar_result.image_path,
-        headline=data.headline,
-        subheadline=data.subheadline or "",
-        cta_text=data.cta_text or "",
-        flyer_format=data.flyer_format,
+        avatar_image_path=avatar_path,
+        headline=params["headline"],
+        subheadline=params["subheadline"] or "",
+        cta_text=params["cta_text"] or "",
+        flyer_format=params["flyer_format"],
+        theme=params["theme"],
+        brand_name=data.brand_name,
+        logo_path=logo_path,
+        logo_label=data.logo_label,
     )
 
     flyer.flyer_image_path = flyer_result["path"]
@@ -1214,17 +1857,20 @@ async def agent_build_flyer(data: AgentFlyerRequest, db: AsyncSession = Depends(
     await db.commit()
 
     await log_event(db, "agent.flyer_built", actor_type="agent",
-                    details={"flyer_id": flyer_id, "format": data.flyer_format,
-                             "use_case": data.use_case, "provider": avatar_result.provider})
+                    details={"flyer_id": flyer_id, "format": params["flyer_format"],
+                             "use_case": params["use_case"], "provider": avatar_provider,
+                             "avatar_id": data.avatar_id, "source_flyer_id": data.source_flyer_id})
     await db.commit()
 
     return {
         "flyer_id": flyer_id,
         "status": "complete",
         "flyer_url": flyer_result["url"],
-        "avatar_url": avatar_result.image_url,
-        "provider": avatar_result.provider,
-        "format": data.flyer_format,
+        "avatar_url": avatar_url,
+        "provider": avatar_provider,
+        "format": params["flyer_format"],
+        "revised_from": data.source_flyer_id,
+        "avatar_reused": bool(data.avatar_id or source_avatar_path),
     }
 
 
@@ -1258,6 +1904,7 @@ async def diagnose(db: AsyncSession = Depends(get_db)):
     and a plain-English summary for the operator.
     """
     import os
+    from app.config import settings
     from app.models.flyer import ReferencePhoto
 
     checks = []

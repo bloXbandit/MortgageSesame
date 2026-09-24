@@ -208,29 +208,57 @@ async def _generate_openai(
         img.save(png_buf, format="PNG")
         png_buf.seek(0)
 
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-        )
-
         full_prompt = (
             f"{style_prompt}. "
             "Preserve the person's face, skin tone, and identity exactly. "
-            "Professional quality, photorealistic."
+            "Sharp focus on the face, professional studio-grade lighting, "
+            "high dynamic range, crisp detail, photorealistic — "
+            "indistinguishable from a real photograph. No illustration or cartoon look."
         )
 
-        response = await client.images.edit(
-            model="gpt-image-1",
-            image=("reference.png", png_buf, "image/png"),
-            prompt=full_prompt,
-            size=size_map.get(output_size, "1024x1024"),
-            n=1,
-        )
+        # Direct REST call — the pinned openai SDK (1.30.x) predates gpt-image-1's
+        # quality / input_fidelity params. input_fidelity=high is what keeps the
+        # face true to the reference photo; quality=high maximizes render detail.
+        base = settings.openai_base_url.rstrip("/")
+        form = {
+            "model": "gpt-image-1",
+            "prompt": full_prompt,
+            "size": size_map.get(output_size, "1024x1024"),
+            "quality": "high",
+            "input_fidelity": "high",
+            "n": "1",
+        }
+        async with httpx.AsyncClient(timeout=180) as client:
+            res = await client.post(
+                f"{base}/images/edits",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                data=form,
+                files={"image": ("reference.png", png_buf, "image/png")},
+            )
+        body = res.json()
+        if res.status_code != 200:
+            err = body.get("error", {}).get("message", f"OpenAI returned {res.status_code}")
+            # input_fidelity is newer — retry once without it for older API deployments
+            if "input_fidelity" in err.lower():
+                form.pop("input_fidelity")
+                png_buf.seek(0)
+                async with httpx.AsyncClient(timeout=180) as client:
+                    res = await client.post(
+                        f"{base}/images/edits",
+                        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                        data=form,
+                        files={"image": ("reference.png", png_buf, "image/png")},
+                    )
+                body = res.json()
+                if res.status_code != 200:
+                    err = body.get("error", {}).get("message", f"OpenAI returned {res.status_code}")
+                    return AvatarResult(success=False, provider="openai", error=err)
+            else:
+                return AvatarResult(success=False, provider="openai", error=err)
 
-        img_data = base64.b64decode(response.data[0].b64_json)
+        img_data = base64.b64decode(body["data"][0]["b64_json"])
         local_path, served_url = _save_bytes(img_data, prefix="avatar_oai", ext=".png")
-        log.info("avatar_generator.openai_success", path=local_path)
+        log.info("avatar_generator.openai_success", path=local_path, quality="high")
 
         return AvatarResult(
             success=True,

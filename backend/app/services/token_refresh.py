@@ -123,3 +123,51 @@ async def refresh_tiktok_token(refresh_token: str) -> dict:
             "then restart the backend process."
         ),
     }
+
+
+async def exchange_meta_token(short_lived_token: str) -> dict:
+    """
+    Exchange a short-lived Meta user token (~1-2h) for a long-lived one (~60 days).
+
+    Requires FB_APP_ID + FB_APP_SECRET in env
+    (App Dashboard → Settings → Basic).
+
+    Returns {success, access_token, expires_in_days, expires_at} or {success: False, error}.
+    """
+    app_id     = os.getenv("FB_APP_ID", "")
+    app_secret = os.getenv("FB_APP_SECRET", "")
+    if not app_id or not app_secret:
+        return {"success": False, "error": "FB_APP_ID or FB_APP_SECRET not set in env"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.get(
+                "https://graph.facebook.com/v25.0/oauth/access_token",
+                params={
+                    "grant_type":        "fb_exchange_token",
+                    "client_id":         app_id,
+                    "client_secret":     app_secret,
+                    "fb_exchange_token": short_lived_token,
+                },
+            )
+    except httpx.RequestError as exc:
+        return {"success": False, "error": f"Network error: {exc}"}
+
+    data = res.json()
+    if res.status_code != 200 or data.get("error"):
+        err = data.get("error", {})
+        log.error("meta_token_exchange_failed", status=res.status_code, body=str(data)[:300])
+        return {"success": False, "error": err.get("message", f"Meta returned {res.status_code}")}
+
+    from datetime import datetime, timedelta
+    expires_in = data.get("expires_in")          # seconds; ~5,184,000 = 60 days
+    expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() if expires_in else None
+    log.info("meta_token_exchanged", expires_in=expires_in)
+    return {
+        "success":       True,
+        "access_token":  data.get("access_token"),
+        "expires_in":    expires_in,
+        "expires_days":  round(expires_in / 86400, 1) if expires_in else None,
+        "expires_at":    expires_at,
+        "note": "Paste this as META_ADS_ACCESS_TOKEN in .env, then restart the backend.",
+    }

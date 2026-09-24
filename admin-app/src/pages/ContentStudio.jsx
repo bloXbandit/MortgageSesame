@@ -1626,6 +1626,25 @@ function FlyerBuilderTab() {
     }
   }
 
+  async function downloadFile(url, filename) {
+    try {
+      const res = await fetch(url, { credentials: 'include' })
+      if (!res.ok) throw new Error('Could not fetch image')
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename || 'flyer.jpg'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
+    } catch (err) {
+      setError(err.message || 'Download failed')
+      window.open(url, '_blank')
+    }
+  }
+
   const card = {
     background: '#2a2a2a', border: `1px solid ${BORDER}`,
     borderRadius: 10, padding: '16px 18px', marginBottom: 14,
@@ -1771,31 +1790,39 @@ function FlyerBuilderTab() {
                   style={{ width: '100%', maxHeight: 420, objectFit: 'contain', borderRadius: 8, border: `1px solid ${BORDER}`, cursor: 'zoom-in', background: '#252525' }}
                   onClick={() => setLightbox(activeFlyer.flyer_image_url)}
                 />
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <a
-                    href={activeFlyer.flyer_image_url}
-                    download
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => downloadFile(activeFlyer.flyer_image_url, `flyer-${activeFlyer.flyer_format}-${activeFlyer.id}.jpg`)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px',
-                      background: WARM, color: '#fff', borderRadius: 7, textDecoration: 'none',
-                      fontSize: '0.78rem', fontWeight: 700,
+                      background: WARM, color: '#fff', borderRadius: 7, border: 'none',
+                      fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
                     }}
                   >
                     <Download size={13} /> Download
-                  </a>
+                  </button>
                   {activeFlyer.avatar_image_url && (
-                    <a
-                      href={activeFlyer.avatar_image_url}
-                      download
+                    <button
+                      onClick={() => downloadFile(activeFlyer.avatar_image_url, `avatar-${activeFlyer.id}.jpg`)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px',
                         background: '#2a2a2a', color: DARK, border: `1px solid ${BORDER}`, borderRadius: 7,
-                        textDecoration: 'none', fontSize: '0.78rem', fontWeight: 700,
+                        fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
                       }}
                     >
                       <Download size={13} /> Avatar only
-                    </a>
+                    </button>
                   )}
+                  <button
+                    onClick={() => navigator.clipboard.writeText(activeFlyer.flyer_image_url)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px',
+                      background: 'none', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 7,
+                      fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    <Copy size={13} /> Copy link
+                  </button>
                 </div>
                 {activeFlyer.provider && (
                   <p style={{ margin: '8px 0 0', fontSize: '0.7rem', color: MUTED }}>
@@ -1876,15 +1903,13 @@ function FlyerBuilderTab() {
 
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                     {f.flyer_image_url && (
-                      <a
-                        href={f.flyer_image_url}
-                        download
+                      <button
                         title="Download"
-                        style={{ color: WARM, display: 'flex', alignItems: 'center' }}
-                        onClick={e => e.stopPropagation()}
+                        onClick={e => { e.stopPropagation(); downloadFile(f.flyer_image_url, `flyer-${f.flyer_format}-${f.id}.jpg`) }}
+                        style={{ color: WARM, display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                       >
                         <Download size={13} />
-                      </a>
+                      </button>
                     )}
                     {f.flyer_image_url && (
                       <button
@@ -1934,6 +1959,17 @@ function FlyerBuilderTab() {
             }}
           >
             <X size={28} />
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); downloadFile(lightbox, 'flyer.jpg') }}
+            style={{
+              position: 'absolute', bottom: 24, right: 24,
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '8px 14px', background: WARM, color: '#fff', border: 'none',
+              borderRadius: 7, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700,
+            }}
+          >
+            <Download size={14} /> Download
           </button>
         </div>
       )}

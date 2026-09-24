@@ -234,6 +234,7 @@ class CampaignOutreach(Base):
     # Template reference
     template_key: Mapped[Optional[str]] = mapped_column(String(100))  # e.g. "equity_voucher"
     template_name: Mapped[Optional[str]] = mapped_column(String(255))
+    step_number: Mapped[Optional[int]] = mapped_column(Integer)       # sequence step (1-based) for campaign drip tracking
 
     # Generated content
     subject: Mapped[Optional[str]] = mapped_column(String(500))

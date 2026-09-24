@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { api, setApiUrl, getApiUrl } from '../utils/api'
-import { Wifi, Server, User, Smartphone, CheckCircle } from 'lucide-react'
+import { Wifi, Server, User, Smartphone, CheckCircle, Image, Trash2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function Settings() {
@@ -113,6 +113,9 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* Brand assets — logos etc. the agent can use on flyers */}
+      <BrandAssets />
+
       {/* AltStore instructions */}
       <section className="card">
         <h3 style={{ margin: '0 0 12px', fontSize: '0.9rem', fontWeight: 600 }}>AltStore Sideload Instructions</h3>
@@ -132,6 +135,99 @@ export default function Settings() {
         </div>
       </section>
     </div>
+  )
+}
+
+function BrandAssets() {
+  const [assets, setAssets] = useState([])
+  const [name, setName] = useState('')
+  const [kind, setKind] = useState('logo')
+  const [file, setFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
+
+  const load = () => api.get('/flyers/assets')
+    .then(d => setAssets(d.assets || []))
+    .catch(() => toast.error('Could not load brand assets'))
+
+  useEffect(() => { load() }, [])
+
+  const uploadAsset = async () => {
+    if (!file) return toast.error('Pick an image file first')
+    if (!name.trim()) return toast.error('Give it a simple name, e.g. "uwm logo"')
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      await api.upload(`/flyers/assets/upload?name=${encodeURIComponent(name.trim())}&kind=${kind}`, fd)
+      toast.success(`Saved "${name.trim()}" — tell the agent to use it by name`)
+      setName(''); setFile(null); load()
+    } catch (e) {
+      toast.error(e.message || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const remove = async (a) => {
+    try {
+      await api.del(`/flyers/assets/${a.id}`)
+      toast.success(`Deleted "${a.name}"`)
+      load()
+    } catch (e) {
+      toast.error(e.message || 'Delete failed')
+    }
+  }
+
+  return (
+    <section className="card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        <Image size={16} color="var(--color-warm)" />
+        <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Brand Assets (logos for flyers)</h3>
+      </div>
+      <p style={{ color: '#888', fontSize: '0.8125rem', margin: '0 0 16px', lineHeight: 1.6 }}>
+        Upload logos or images with a simple name — then just tell the agent, e.g.
+        "add the uwm logo to that flyer" or "make it say Powered by UWM with the logo".
+        PNG with transparency looks best.
+      </p>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: '140px' }}>
+          <label style={labelStyle}>Name</label>
+          <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder='e.g. "uwm logo"' />
+        </div>
+        <div>
+          <label style={labelStyle}>Type</label>
+          <select className="input" value={kind} onChange={e => setKind(e.target.value)}>
+            <option value="logo">Logo</option>
+            <option value="image">Image</option>
+            <option value="screenshot">Screenshot</option>
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>File</label>
+          <input type="file" accept="image/png,image/jpeg,image/webp" className="input"
+            onChange={e => setFile(e.target.files?.[0] || null)} />
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={uploadAsset} disabled={uploading}>
+          <Upload size={13} /> {uploading ? 'Uploading...' : 'Upload'}
+        </button>
+      </div>
+      {assets.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {assets.map(a => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+              <img src={a.image_url} alt={a.name} style={{ width: '40px', height: '40px', objectFit: 'contain', borderRadius: '6px', background: 'rgba(255,255,255,0.06)' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{a.name}</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase' }}>{a.kind}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => remove(a)} title="Delete">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

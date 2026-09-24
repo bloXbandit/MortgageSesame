@@ -41,6 +41,7 @@ SKILL_FILES = {
     "objection_crusher":    "07_objection-crusher.md",
     "language_killer":      "08_generic-language-killer.md",
     "facebook_setup":       "09_facebook-meta-setup.md",
+    "material_combos":      "12_material-combos.md",
     "orchestrator":         "ORCHESTRATOR.md",
 }
 
@@ -48,6 +49,7 @@ VALID_AVATARS  = {"declined_buyer", "first_timer", "equity_prisoner", "realtor_c
 VALID_PRODUCTS = {"fha", "va", "dpa", "conventional", "heloc", "dscr", "refi"}
 VALID_MARKETS  = {"MD", "DC", "both"}
 VALID_BUDGETS  = {"low", "mid", "scale"}
+VALID_COMBOS   = {"static", "video", "voice_graphic", "full_stack", "repurpose"}
 
 
 # ── Pre-built campaign templates ─────────────────────────────────────────────
@@ -328,6 +330,7 @@ def _build_system_prompt(avatar: str, product: str, reference_context: str = "")
     objections    = _load_skill("objection_crusher")
     qa            = _load_skill("language_killer")
     facebook      = _load_skill("facebook_setup")
+    combos        = _load_skill("material_combos")
     orchestrator  = _load_skill("orchestrator")
 
     name  = _s.banker_name
@@ -388,6 +391,9 @@ Read them carefully. They are your operating instructions.
 === SKILL 09: FACEBOOK / META AD SETUP ===
 {facebook}
 
+=== SKILL 12: MATERIAL COMBOS (flyer / video / voice assembly) ===
+{combos}
+
 === ORCHESTRATOR (your operating sequence) ===
 {orchestrator}
 
@@ -399,7 +405,90 @@ COMPLIANCE RULES (non-negotiable):
 - Illustrative scenarios must be framed as "for example" or "hypothetically"
 - Equal Housing Opportunity on all landing page copy
 - All Meta/Facebook ads must use Special Ad Category: HOUSING
+
+REAL LINKS & FACTS — use these verbatim wherever copy calls for them.
+NEVER output bracketed placeholders like [link], [url], [website], [phone]:
+- Zillow profile / reviews: {_s.zillow_url or "(not configured — omit the link reference)"}
+- Booking / free call: {_s.calcom_link or "(not configured)"}
+- Full application (1003): {_s.app_1003_url or "(not configured)"}
+- Banker phone: {_s.banker_phone or "(not configured)"}
+- Email: {_s.campaign_from_email or "(not configured)"}
+- Email merge fields [Name] / [First Name] are allowed ONLY inside email_sequence bodies — never in the sales letter.
 """
+
+
+def _scrub_campaign_copy(result: dict) -> list:
+    """
+    Replace known placeholder tokens in generated copy with real configured
+    values. Returns a list of leftover [token] strings we couldn't resolve
+    (surfaced as result['placeholder_warnings']).
+    Merge fields [Name]/[First Name] are kept inside email_sequence bodies —
+    they're resolved per-recipient at deploy time.
+    """
+    import re as _re
+
+    mapping = {
+        "link": _s.zillow_url, "zillow": _s.zillow_url, "zillow link": _s.zillow_url,
+        "zillow profile": _s.zillow_url, "review link": _s.zillow_url,
+        "url": _s.zillow_url, "website": _s.zillow_url,
+        "booking": _s.calcom_link, "cal.com link": _s.calcom_link,
+        "calendar link": _s.calcom_link, "call link": _s.calcom_link,
+        "1003": _s.app_1003_url, "application link": _s.app_1003_url,
+        "phone": _s.banker_phone, "nmls": _s.banker_nmls,
+        "email": _s.campaign_from_email,
+    }
+    merge_ok = {"name", "first name", "first_name"}
+
+    def _sub_text(text, keep_merge=False):
+        if not isinstance(text, str):
+            return text, []
+        leftovers = []
+
+        def _rep(m):
+            raw = m.group(0)
+            token = (m.group(1) or m.group(2) or "").strip().lower()
+            if token in merge_ok:
+                return raw if keep_merge else "there"   # public letter — generic fallback
+            val = mapping.get(token)
+            if val:
+                return val
+            leftovers.append(raw)
+            return raw
+
+        out = _re.sub(r"\[([^\[\]]{1,40})\]|\{([^{}]{1,40})\}", _rep, text)
+        return out, leftovers
+
+    leftovers_all = []
+
+    # Sales letter — public-facing, no merge fields allowed
+    letter = result.get("sales_letter") or {}
+    for key in ("headline", "subheadline", "lead_opening", "villain_paragraph",
+                "proof_block", "cta_primary", "cta_secondary", "compliance_footer"):
+        if key in letter:
+            letter[key], left = _sub_text(letter[key])
+            leftovers_all += left
+    for step in letter.get("method_steps") or []:
+        for key in ("title", "body"):
+            if isinstance(step, dict) and key in step:
+                step[key], left = _sub_text(step[key])
+                leftovers_all += left
+
+    # Email sequence — keep merge fields
+    for email in result.get("email_sequence") or []:
+        for key in ("subject", "body"):
+            if isinstance(email, dict) and key in email:
+                email[key], left = _sub_text(email[key], keep_merge=True)
+                leftovers_all += left
+
+    # Ad units — public-facing
+    for unit in result.get("ad_units") or []:
+        if isinstance(unit, dict):
+            for key, val in list(unit.items()):
+                if isinstance(val, str):
+                    unit[key], left = _sub_text(val)
+                    leftovers_all += left
+
+    return sorted(set(leftovers_all))
 
 
 async def build_ad_campaign(
@@ -412,6 +501,8 @@ async def build_ad_campaign(
     flyer_image_url: Optional[str] = None,
     template_id: Optional[str] = None,
     reference_page_slug: Optional[str] = None,
+    material_combo: str = "static",
+    video_aspect_ratio: Optional[str] = None,
 ) -> dict:
     """
     Run the full 9-step advertising skill chain.
@@ -421,6 +512,11 @@ async def build_ad_campaign(
     reference_page_slug: existing CampaignPage slug — pulls headline/proof_block
                  and injects as reference context so the new campaign builds on
                  what already worked.
+    material_combo: static | video | voice_graphic | full_stack | repurpose —
+                 which creative materials to assemble (see 12_material-combos.md).
+                 video/full_stack also submit a HeyGen avatar video render from
+                 the winning ad angle's hook (async — poll /agent/materials later).
+    video_aspect_ratio: 9:16 | 1:1 — override auto-detection from template placements.
 
     Returns the complete campaign package including facebook_setup block.
     Routes all assets to the Approval Queue.
@@ -445,6 +541,24 @@ async def build_ad_campaign(
         market = "MD"
     if budget_hint not in VALID_BUDGETS:
         budget_hint = "low"
+    if material_combo not in VALID_COMBOS:
+        material_combo = "static"
+    combo_warning = None
+    if budget_hint == "low" and material_combo in ("video", "full_stack"):
+        combo_warning = (
+            "Video render requested on a 'low' budget hint — video costs provider credits. "
+            "Honored because it was explicitly requested."
+        )
+        log.info("ad_campaign.combo_budget_mismatch", combo=material_combo, budget=budget_hint)
+    # Auto aspect ratio: template placements decide; explicit arg wins
+    if video_aspect_ratio not in ("9:16", "1:1"):
+        video_aspect_ratio = None
+    if video_aspect_ratio is None and template:
+        placements = template.get("facebook", {}).get("placements", [])
+        has_vertical = any(p for p in placements if "stor" in p.lower() or "reel" in p.lower())
+        video_aspect_ratio = "9:16" if has_vertical else "1:1"
+    if video_aspect_ratio is None:
+        video_aspect_ratio = "1:1"
 
     # ── Pull reference sales letter if slug provided ───────────────────────────
     reference_context = ""
@@ -486,6 +600,7 @@ async def build_ad_campaign(
         "the message. The flyer already carries the headline visually — the copy should "
         "complement it, not repeat it verbatim."
     ) if flyer_image_url else ""
+    combo_line  = f"\nMATERIAL COMBO for this build: {material_combo}. Apply the rules in SKILL 12 — only reference materials that combo actually includes."
 
     user_prompt = f"""Build a complete ad campaign using the full 9-step chain from the ORCHESTRATOR.
 
@@ -493,7 +608,7 @@ Campaign parameters:
 - Avatar: {avatar}
 - Product: {product}
 - Market: {market}
-- Budget hint: {budget_hint}{proof_line}{flyer_line}
+- Budget hint: {budget_hint}{proof_line}{flyer_line}{combo_line}
 
 Run all steps in sequence (0 through 8).
 Return the final JSON output package exactly as specified in the ORCHESTRATOR's "FINAL OUTPUT PACKAGE" section.
@@ -506,11 +621,77 @@ Output ONLY valid JSON — no markdown, no preamble, no explanation outside the 
         log.error("ad_campaign.generation_failed", run_id=run_id, error=str(exc))
         return {"error": f"Generation failed: {str(exc)}", "run_id": run_id}
 
+    # ── Material assembly: HeyGen avatar video (video / full_stack combos) ─────
+    video_info = None
+    if material_combo in ("video", "full_stack"):
+        try:
+            from app.services.providers.video import get_video_provider
+            from app.models.content import MediaAsset
+
+            # Script: winning ad unit's hook + core argument, trimmed for 30–45s read
+            ad_units = result.get("ad_units", [])
+            first = ad_units[0] if ad_units else {}
+            hook = first.get("hook", "")
+            body = first.get("core_argument", "")
+            cta  = first.get("cta_text", "Book a free call.")
+            script = " ".join(p for p in [hook, body, cta] if p).strip()
+            if not script:
+                raise ValueError("No ad hook available to build a video script")
+            script = script[:600]   # keep the read under ~45 seconds
+
+            provider = get_video_provider()
+            vr = await provider.generate_video({
+                "script":       script,
+                "aspect_ratio": video_aspect_ratio,
+                "test_mode":    os.getenv("HEYGEN_TEST_MODE", "true").lower() == "true",
+            })
+
+            asset = MediaAsset(
+                name=f"campaign_video_{run_id[:8]}",
+                asset_type="video_raw",
+                mime_type="video/mp4",
+                file_url=vr.video_url,
+                tags=["heygen", "campaign", avatar, product,
+                      f"run:{run_id}", f"aspect:{video_aspect_ratio}"]
+                     + ([f"provider_id:{vr.provider_id}"] if vr.provider_id else []),
+            )
+            db.add(asset)
+            await db.flush()
+
+            video_info = {
+                "asset_id":     asset.id,
+                "provider_id":  vr.provider_id,
+                "status":       vr.status,          # processing | completed | failed
+                "video_url":    vr.video_url,
+                "aspect_ratio": video_aspect_ratio,
+                "script_used":  script,
+                "test_mode":    os.getenv("HEYGEN_TEST_MODE", "true").lower() == "true",
+                "error":        vr.error,
+            }
+            result["video"] = video_info
+            log.info("ad_campaign.video_submitted", run_id=run_id,
+                     provider_id=vr.provider_id, status=vr.status, aspect=video_aspect_ratio)
+        except Exception as exc:
+            log.error("ad_campaign.video_failed", run_id=run_id, error=str(exc))
+            result["video"] = {"status": "failed", "error": str(exc), "aspect_ratio": video_aspect_ratio}
+
+    result["material_combo"] = material_combo
+    if combo_warning:
+        result["combo_warning"] = combo_warning
+
+    # ── Scrub placeholder tokens out of generated copy before saving ─────────
+    # The model sometimes emits [link], [Name], {booking} etc. — substitute the
+    # real configured values for known tokens and log whatever remains.
+    letter = result.get("sales_letter", {})
+    placeholder_warnings = _scrub_campaign_copy(result)
+    if placeholder_warnings:
+        result["placeholder_warnings"] = placeholder_warnings
+        log.warning("ad_campaign.placeholders_left", run_id=run_id, tokens=placeholder_warnings)
+
     # ── Save campaign page (unpublished by default) ───────────────────────────
     saved_slug = None
     try:
         from app.models.campaign import CampaignPage
-        letter = result.get("sales_letter", {})
         slug = letter.get("url_slug") or f"{avatar}-{product}-{run_id[:6]}"
         # Sanitise slug — lowercase, hyphens only
         import re

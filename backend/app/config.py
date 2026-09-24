@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from_name: str = ""
+    sendgrid_api_key: str = ""
+    resend_api_key: str = ""
     campaign_from_name: str = ""       # defaults to banker_name if empty
     campaign_from_email: str = ""      # defaults to smtp_user if empty
 
@@ -63,6 +65,8 @@ class Settings(BaseSettings):
     tiktok_access_token: str = ""
     facebook_page_access_token: str = ""
     facebook_page_id: str = ""
+    meta_ad_account_id: str = ""          # act_<digits> — Meta Ads paid campaigns
+    meta_ads_access_token: str = ""       # user/system-user token w/ ads_management
     linkedin_access_token: str = ""
     google_business_account_id: str = ""
 
@@ -79,6 +83,10 @@ class Settings(BaseSettings):
     # Agent
     agent_api_key: str = "CHANGE_ME"
     agent_webhook_url: str = ""
+
+    # Scheduler — drip sequences + scheduled posts
+    scheduler_enabled: bool = True
+    scheduler_interval_minutes: int = 15
 
     # Internal admin seed (auto-created on startup if not exists)
     admin_seed_email: str = ""
@@ -117,6 +125,8 @@ class Settings(BaseSettings):
     # Banker identity — must be set in .env for each deployment
     banker_name: str = ""
     banker_nmls: str = ""
+    banker_phone: str = ""       # shown on flyer contact blocks
+    flyer_brand_name: str = ""   # brand label on flyers (e.g. "VZZ Mortgage"); falls back to app_name if empty
     app_1003_url: str = ""
     zillow_url: str = ""
     service_states: str = ""

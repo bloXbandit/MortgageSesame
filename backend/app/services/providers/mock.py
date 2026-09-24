@@ -233,13 +233,99 @@ class SendGridEmailProvider(EmailProvider):
         self.from_name = from_name
 
     async def send_email(self, payload: dict) -> ProviderResult:
-        raise NotImplementedError("SendGrid — install sendgrid-python and implement")
+        """Send via SendGrid v3 API using httpx. No SDK required."""
+        import httpx
+
+        if not self.api_key:
+            return ProviderResult(success=False, error="SENDGRID_API_KEY not set")
+
+        to_email = payload.get("to_email")
+        if not to_email:
+            return ProviderResult(success=False, error="to_email is required")
+
+        from_email = payload.get("from_email") or self.from_email
+        from_name = payload.get("from_name") or self.from_name
+
+        content = []
+        if payload.get("text_body"):
+            content.append({"type": "text/plain", "value": payload["text_body"]})
+        if payload.get("html_body"):
+            content.append({"type": "text/html", "value": payload["html_body"]})
+        if not content:
+            return ProviderResult(success=False, error="no body content")
+
+        personalization = {"to": [{"email": to_email}]}
+        if payload.get("to_name"):
+            personalization["to"][0]["name"] = payload["to_name"]
+
+        body = {
+            "personalizations": [personalization],
+            "from": {"email": from_email, "name": from_name},
+            "subject": payload.get("subject", "(no subject)"),
+            "content": content,
+            # open + click tracking ON — webhook events keyed by X-Message-Id
+            "tracking_settings": {
+                "open_tracking": {"enable": True},
+                "click_tracking": {"enable": True},
+            },
+        }
+        if payload.get("reply_to"):
+            body["reply_to"] = {"email": payload["reply_to"]}
+        # custom_args ride through to webhook events for matching
+        tags = payload.get("tags") or payload.get("metadata") or {}
+        if tags:
+            body["custom_args"] = {k: str(v) for k, v in tags.items()}
+
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    json=body,
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+            if r.status_code in (200, 201, 202):
+                return ProviderResult(
+                    success=True,
+                    provider_id=r.headers.get("X-Message-Id"),
+                    status="queued",
+                )
+            return ProviderResult(
+                success=False, status="failed",
+                error=f"SendGrid {r.status_code}: {r.text[:300]}")
+        except Exception as e:
+            return ProviderResult(success=False, error=str(e))
 
     async def add_suppression(self, email: str, reason: str) -> bool:
-        raise NotImplementedError
+        """Global unsubscribe — SendGrid suppresses across all sends."""
+        import httpx
+        if not self.api_key:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.post(
+                    "https://api.sendgrid.com/v3/asm/suppressions/global",
+                    json={"recipient_emails": [email]},
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+            return r.status_code in (200, 201)
+        except Exception:
+            return False
 
     async def get_suppressions(self) -> list[str]:
-        raise NotImplementedError
+        import httpx
+        if not self.api_key:
+            return []
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(
+                    "https://api.sendgrid.com/v3/suppression/unsubscribes",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+            if r.status_code == 200:
+                return [row.get("email") for row in r.json() if row.get("email")]
+        except Exception:
+            pass
+        return []
 
     async def handle_webhook(self, payload: dict) -> dict:
         # SendGrid sends a list of events

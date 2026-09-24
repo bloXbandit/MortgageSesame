@@ -62,6 +62,17 @@ export default function CampaignPage() {
 
   const steps = page.method_steps || []
 
+  // Flyer URLs may carry a stale LAN host — always resolve media through the
+  // API origin the page was loaded against.
+  let flyerSrc = null
+  if (page.flyer_image_url) {
+    try {
+      flyerSrc = `${API}${new URL(page.flyer_image_url).pathname}`
+    } catch {
+      flyerSrc = page.flyer_image_url.startsWith('/') ? `${API}${page.flyer_image_url}` : page.flyer_image_url
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#fffbf5' }}>
       <RateTicker />
@@ -118,6 +129,21 @@ export default function CampaignPage() {
               </p>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* ── Flyer / visual creative ─────────────────────────────────────── */}
+      {flyerSrc && (
+        <section style={{ padding: 'clamp(40px,6vw,64px) 24px', background: '#fffbf5', textAlign: 'center' }}>
+          <img
+            src={flyerSrc}
+            alt={page.headline || 'Campaign details'}
+            style={{
+              maxWidth: 480, width: '100%', height: 'auto',
+              borderRadius: 14, border: '1px solid #ede8e0',
+              boxShadow: '0 18px 50px rgba(0,0,0,0.14)',
+            }}
+          />
         </section>
       )}
 

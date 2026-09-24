@@ -61,6 +61,7 @@ from app.services.campaign_writer import get_writer
 from app.services.mail_templates import render_mail_template
 from app.services.providers.registry import get_provider
 from app.routers.auth import get_current_user
+from app.middleware.auth import require_agent_key
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/outreach", tags=["outreach"])
@@ -743,6 +744,7 @@ async def generate_outreach(
         prospect_id=prospect.id,
         channel=channel,
         template_key=template_key,
+        step_number=body.step,
         status=OutreachStatus.DRAFT,
     )
 
@@ -858,6 +860,7 @@ async def generate_batch(
                 prospect_id=p.id,
                 channel=ch,
                 template_key="refi_certificate",
+                step_number=step,
                 status=OutreachStatus.DRAFT,
             )
 
@@ -966,6 +969,7 @@ async def get_outreach_item(
         "prospect_id": item.prospect_id,
         "template_key": item.template_key,
         "template_name": item.template_name,
+        "step_number": item.step_number,
         "subject": item.subject,
         "body_text": item.body_text,
         "body_html": item.body_html,
@@ -1160,8 +1164,9 @@ async def send_item(
             raise HTTPException(400, f"Unknown channel: {item.channel}")
 
         # Update item with send result
-        item.provider = send_result.provider_id or "mock" if hasattr(send_result, 'provider_id') else "mock"
+        item.provider = getattr(provider, 'name', None) or "mock"
         item.provider_job_id = getattr(send_result, 'provider_id', None)
+        item.provider_message_id = getattr(send_result, 'provider_id', None)
         item.status = OutreachStatus.SENT
         item.sent_at = datetime.utcnow()
 
@@ -1522,7 +1527,24 @@ async def provider_webhook(
     except Exception:
         payload = {}
 
+    # SignalWire/Twilio post inbound messages + status callbacks as
+    # application/x-www-form-urlencoded, not JSON
+    if not payload:
+        try:
+            form = await request.form()
+            payload = dict(form)
+        except Exception:
+            payload = {}
+
     log.info("webhook.received", provider=provider_name, payload_keys=list(payload.keys()) if isinstance(payload, dict) else "list")
+
+    # ── Inbound message (reply) ──────────────────────────────────────────────
+    # A real inbound SMS has From + Body and no delivery-status field.
+    # Status callbacks carry SmsStatus/MessageStatus/event instead.
+    if isinstance(payload, dict) and payload.get("From") and payload.get("Body") is not None \
+            and not (payload.get("SmsStatus") or payload.get("MessageStatus") or payload.get("event")):
+        result = await _handle_inbound_sms(db, provider_name, payload)
+        return {"received": True, "inbound": True, **result}
 
     # Normalize event based on provider
     events = payload if isinstance(payload, list) else [payload]
@@ -1580,3 +1602,269 @@ async def provider_webhook(
         await db.commit()
 
     return {"received": True, "events_processed": len(events)}
+
+
+# ── Scheduler ────────────────────────────────────────────────────────────────
+
+@router.post("/scheduler/run")
+async def run_scheduler(
+    db: AsyncSession = Depends(get_db),
+    _auth=Depends(require_agent_key),
+):
+    """
+    Run one scheduler tick: advance due campaign sequence steps (drafted for
+    approval — nothing auto-sends), publish SCHEDULED social posts whose
+    scheduled_date has passed, and resurface due callbacks to the call queue.
+
+    Auth: require_agent_key — accepts the Pi agent's API key or an admin JWT,
+    so both a cron'd agent tick and a manual "run now" from the UI work.
+    """
+    from app.services.scheduler import run_scheduler_tick
+    return await run_scheduler_tick(db)
+
+
+# ── Inbound SMS replies ──────────────────────────────────────────────────────
+
+_STOP_WORDS = {"stop", "stopall", "unsubscribe", "cancel", "end", "quit"}
+_START_WORDS = {"start", "unstop", "subscribe"}
+
+
+def _normalize_phone(raw: str) -> str:
+    """Last 10 digits — matches however the prospect's number was imported."""
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+async def _handle_inbound_sms(db: AsyncSession, provider_name: str, payload: dict) -> dict:
+    """
+    Inbound SMS reply. SignalWire/Twilio posts From/To/Body/MessageSid.
+
+    - STOP-family keywords → suppression entry + prospect flagged
+    - Everything else → mark latest outreach REPLIED, create priority-1
+      CallTask, push AGENT_WEBHOOK_URL notification, audit-log.
+    """
+    from app.middleware.audit import log_event
+
+    from_raw = str(payload.get("From", ""))
+    body = str(payload.get("Body", "") or "").strip()
+    msg_sid = payload.get("MessageSid") or payload.get("SmsSid") or ""
+    phone = _normalize_phone(from_raw)
+    word = body.strip().lower()
+
+    log.info("inbound.sms", provider=provider_name, phone_tail=phone[-4:] if phone else "?",
+             body_len=len(body))
+
+    # ── Opt-out keywords (belt-and-suspenders; carriers also handle STOP) ────
+    if word in _STOP_WORDS:
+        existing = await db.execute(
+            select(SuppressionEntry).where(SuppressionEntry.value == phone))
+        if phone and not existing.scalar_one_or_none():
+            db.add(SuppressionEntry(
+                value=phone, value_type="phone", reason="opt_out",
+                source=f"{provider_name}_inbound", notes=f"Keyword: {body[:50]}"))
+        await _flag_prospect_suppressed(db, phone)
+        await db.commit()
+        await log_event(db, "inbound.opt_out", actor_type="system",
+                        details={"phone_tail": phone[-4:] if phone else "?", "keyword": word})
+        await db.commit()
+        return {"action": "opted_out"}
+
+    if word in _START_WORDS:
+        # Un-suppress: remove phone suppression entries
+        existing = await db.execute(
+            select(SuppressionEntry).where(SuppressionEntry.value == phone))
+        for entry in existing.scalars().all():
+            await db.delete(entry)
+        await db.commit()
+        return {"action": "opted_in"}
+
+    # ── Match prospect / contact by phone ────────────────────────────────────
+    prospect = await _find_prospect_by_phone(db, phone)
+    contact = None
+    if not prospect:
+        contact = await _find_contact_by_phone(db, phone)
+
+    # ── Mark the most recent outbound item as REPLIED ────────────────────────
+    replied_item = None
+    if prospect:
+        q = await db.execute(
+            select(CampaignOutreach)
+            .where(CampaignOutreach.prospect_id == prospect.id)
+            .where(CampaignOutreach.sent_at.isnot(None))
+            .order_by(CampaignOutreach.sent_at.desc())
+            .limit(1))
+        replied_item = q.scalar_one_or_none()
+    elif contact:
+        q = await db.execute(
+            select(CampaignOutreach)
+            .where(CampaignOutreach.contact_id == contact.id)
+            .where(CampaignOutreach.sent_at.isnot(None))
+            .order_by(CampaignOutreach.sent_at.desc())
+            .limit(1))
+        replied_item = q.scalar_one_or_none()
+
+    if replied_item:
+        replied_item.status = OutreachStatus.REPLIED
+        replied_item.replied_at = datetime.utcnow()
+
+    # ── Hot-lead call task ───────────────────────────────────────────────────
+    task = CallTask(
+        campaign_id=replied_item.campaign_id if replied_item else None,
+        outreach_id=replied_item.id if replied_item else None,
+        prospect_id=prospect.id if prospect else None,
+        contact_id=(contact.id if contact else (prospect.contact_id if prospect else None)),
+        prospect_name=(prospect.full_name if prospect else (contact.first_name + " " + (contact.last_name or "") if contact else None)),
+        phone=from_raw,
+        property_address=prospect.property_address if prospect else None,
+        trigger="sms_reply",
+        trigger_detail=f"Inbound SMS: \"{body[:300]}\"",
+        priority=1,
+        campaign_context=replied_item.template_name if replied_item else None,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+
+    await log_event(db, "inbound.sms_reply", actor_type="system",
+                    resource_type="call_task", resource_id=task.id,
+                    details={"phone_tail": phone[-4:] if phone else "?",
+                             "prospect_id": prospect.id if prospect else None,
+                             "matched": bool(prospect or contact)})
+    await db.commit()
+
+    # ── Push notification to operator via agent webhook ──────────────────────
+    if _s.agent_webhook_url:
+        try:
+            import httpx as _httpx
+            notify = {
+                "event": "inbound_sms_reply",
+                "from": from_raw,
+                "body": body[:500],
+                "prospect": prospect.full_name if prospect else None,
+                "call_task_id": task.id,
+            }
+            async with _httpx.AsyncClient(timeout=5) as client:
+                await client.post(_s.agent_webhook_url, json=notify)
+        except Exception:
+            pass  # never block the webhook response on notification failure
+
+    return {
+        "action": "reply_recorded",
+        "matched_prospect": prospect.id if prospect else None,
+        "call_task_id": task.id,
+    }
+
+
+async def _find_prospect_by_phone(db: AsyncSession, phone: str):
+    if not phone:
+        return None
+    candidates = (await db.execute(
+        select(Prospect).where(Prospect.phone.isnot(None)))).scalars().all()
+    for p in candidates:
+        if _normalize_phone(p.phone) == phone:
+            return p
+    return None
+
+
+async def _find_contact_by_phone(db: AsyncSession, phone: str):
+    if not phone:
+        return None
+    from app.models.contact import Contact
+    candidates = (await db.execute(
+        select(Contact).where(Contact.phone.isnot(None)))).scalars().all()
+    for c in candidates:
+        if _normalize_phone(c.phone) == phone:
+            return c
+    return None
+
+
+async def _flag_prospect_suppressed(db: AsyncSession, phone: str) -> None:
+    prospect = await _find_prospect_by_phone(db, phone)
+    if prospect:
+        prospect.is_suppressed = True
+        prospect.suppression_reason = "sms_opt_out"
+    contact = await _find_contact_by_phone(db, phone)
+    if contact:
+        contact.is_opted_out = True
+
+
+# ── Newsletter ───────────────────────────────────────────────────────────────
+
+class NewsletterDraftRequest(BaseModel):
+    audience: str = "contacts"                    # contacts | prospect_list
+    prospect_list_id: Optional[str] = None        # required when audience=prospect_list
+    contact_ids: Optional[List[str]] = None       # optional subset of contacts
+    limit: int = 500
+
+
+@router.post("/newsletter/draft")
+async def draft_newsletter(
+    body: NewsletterDraftRequest,
+    db: AsyncSession = Depends(get_db),
+    _auth=Depends(require_agent_key),
+):
+    """
+    Draft a market-update newsletter for an audience — rates pulled live from
+    the latest RateSnapshot. Creates approval-gated DRAFT outreach items;
+    nothing sends. Agent-callable (Pi can run it weekly) or admin-clickable.
+    """
+    from app.services.newsletter import draft_market_update
+    from app.models.contact import Contact
+
+    recipients = []   # (prospect_id, contact_id, email, first_name)
+
+    if body.audience == "prospect_list":
+        if not body.prospect_list_id:
+            raise HTTPException(400, "prospect_list_id required when audience=prospect_list")
+        rows = (await db.execute(
+            select(Prospect)
+            .where(Prospect.prospect_list_id == body.prospect_list_id)
+            .where(Prospect.is_do_not_contact == False)
+            .where(Prospect.is_suppressed == False)
+            .where(Prospect.email.isnot(None))
+            .limit(body.limit)
+        )).scalars().all()
+        for p in rows:
+            recipients.append((p.id, None, p.email, p.first_name))
+    else:
+        q = (select(Contact)
+             .where(Contact.consent_email == True)
+             .where(Contact.is_opted_out == False)
+             .where(Contact.is_dnc == False)
+             .where(Contact.email.isnot(None))
+             .limit(body.limit))
+        if body.contact_ids:
+            q = select(Contact).where(Contact.id.in_(body.contact_ids))
+        rows = (await db.execute(q)).scalars().all()
+        for c in rows:
+            if not c.is_opted_out and not c.is_dnc and c.email:
+                recipients.append((None, c.id, c.email, c.first_name))
+
+    if not recipients:
+        return {"drafted": 0, "note": "No eligible recipients (consent_email required for contacts)"}
+
+    drafted = 0
+    for prospect_id, contact_id, email, first in recipients:
+        content = await draft_market_update(db, recipient_email=email,
+                                            first_name=first or "there")
+        db.add(CampaignOutreach(
+            prospect_id=prospect_id, contact_id=contact_id,
+            channel=OutreachChannel.EMAIL, step_number=1,
+            status=OutreachStatus.DRAFT, approval_status="pending",
+            template_name="newsletter_market_update",
+            subject=content["subject"],
+            body_text=content["body_text"],
+            body_html=content["body_html"],
+            merge_data={"source": "newsletter", "as_of": content["as_of"]},
+        ))
+        drafted += 1
+
+    await db.commit()
+    log.info("newsletter.drafted", drafted=drafted, audience=body.audience)
+    return {
+        "drafted": drafted,
+        "audience": body.audience,
+        "rates_as_of": content["as_of"],
+        "subject": content["subject"],
+        "note": "Drafts are in the outreach queue awaiting approval — nothing sent.",
+    }

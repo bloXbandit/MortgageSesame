@@ -1,3 +1,4 @@
+import structlog
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from app.services import ai_service
 from app.config import settings as _s
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
+log = structlog.get_logger()
 
 
 class CampaignCreate(BaseModel):
@@ -301,6 +303,7 @@ async def get_campaign_page_public(slug: str, db: AsyncSession = Depends(get_db)
         "cta_primary":       page.cta_primary,
         "cta_secondary":     page.cta_secondary,
         "compliance_footer": page.compliance_footer,
+        "flyer_image_url":   page.flyer_image_url,
     }
 
 
@@ -354,4 +357,171 @@ def _serialize(c: Campaign) -> dict:
         "requires_approval": c.requires_approval,
         "contact_count": len(c.contact_ids or []),
         "created_at": c.created_at.isoformat() if c.created_at else None,
+    }
+
+
+class DeployRequest(BaseModel):
+    prospect_list_id: Optional[str] = None
+    contact_ids: Optional[List[str]] = None
+
+
+def _merge_tokens(text: str, first: str) -> str:
+    """Resolve [Name] / [First Name] / {first_name} merge fields for a recipient."""
+    import re as _re
+    if not text:
+        return text
+    return _re.sub(
+        r"\[(name|first\s*name|first_name)\]|\{(name|first_name)\}",
+        first or "there", text, flags=_re.IGNORECASE)
+
+
+def _email_html(text: str) -> str:
+    paras = [f"<p>{p.replace(chr(10), '<br>')}</p>" for p in (text or "").split("\n\n") if p.strip()]
+    return "".join(paras)
+
+
+@router.post("/pages/{slug}/deploy", tags=["campaign-pages"])
+async def deploy_campaign_page(
+    slug: str,
+    body: DeployRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Turn a built campaign page's email_sequence into a LIVE drip campaign:
+      - creates a Campaign + CampaignSteps (with the generated copy as templates)
+      - drafts step-1 outreach items for every recipient (approval-gated)
+      - the scheduler then auto-drafts steps 2..N when delay_days elapse
+
+    Recipients: prospect_list_id, or contact_ids (auto-bridged into a Prospect
+    list so the outreach engine + scheduler handle them uniformly).
+    """
+    from app.models.outreach import (
+        Prospect, ProspectList, CampaignOutreach,
+        OutreachChannel, OutreachStatus, ProspectSource, ProspectType)
+    from app.models.contact import Contact
+
+    page = (await db.execute(
+        select(CampaignPage).where(CampaignPage.slug == slug))).scalar_one_or_none()
+    if not page:
+        raise HTTPException(404, "Campaign page not found")
+
+    emails = page.email_sequence or []
+    if not emails:
+        raise HTTPException(400, "This campaign page has no email_sequence to deploy")
+
+    # ── Resolve recipients ────────────────────────────────────────────────────
+    prospects: list[Prospect] = []
+
+    if body.prospect_list_id:
+        prospects = (await db.execute(
+            select(Prospect)
+            .where(Prospect.prospect_list_id == body.prospect_list_id)
+            .where(Prospect.is_do_not_contact == False)
+            .where(Prospect.is_suppressed == False)
+        )).scalars().all()
+
+    if body.contact_ids:
+        # Bridge contacts → prospect rows in a system list so the outreach
+        # engine, suppression checks, and scheduler treat them uniformly.
+        bridge = (await db.execute(
+            select(ProspectList).where(ProspectList.name == "Inbound Contacts"))).scalar_one_or_none()
+        if not bridge:
+            bridge = ProspectList(name="Inbound Contacts", source=ProspectSource.CONTACT_LIST,
+                                  prospect_type=ProspectType.HOMEOWNER)
+            db.add(bridge)
+            await db.flush()
+        for cid in body.contact_ids:
+            contact = (await db.execute(
+                select(Contact).where(Contact.id == cid))).scalar_one_or_none()
+            if not contact or contact.is_opted_out or contact.is_dnc:
+                continue
+            existing = (await db.execute(
+                select(Prospect).where(Prospect.contact_id == contact.id))).scalar_one_or_none()
+            if existing:
+                prospects.append(existing)
+                continue
+            p = Prospect(
+                prospect_list_id=bridge.id, contact_id=contact.id,
+                first_name=contact.first_name, last_name=contact.last_name,
+                full_name=f"{contact.first_name or ''} {contact.last_name or ''}".strip(),
+                email=contact.email, phone=contact.phone,
+                mailing_city=contact.city, mailing_state=contact.state,
+                prospect_type=ProspectType.HOMEOWNER,
+            )
+            db.add(p)
+            await db.flush()
+            prospects.append(p)
+
+    if not prospects:
+        raise HTTPException(400, "No recipients — pass prospect_list_id or contact_ids")
+
+    # ── Create the campaign + steps (copy rides as MessageTemplates) ──────────
+    campaign = Campaign(
+        name=f"{(page.headline or slug)[:80]} — deployed",
+        campaign_type=CampaignType.PAST_LEAD_NURTURE,
+        goal=CampaignGoal.BOOK_CALL,
+        status=CampaignStatus.ACTIVE,
+        channel=Channel.EMAIL,
+        sequence_length=len(emails),
+        requires_approval=True,
+        created_by=current_user.id,
+    )
+    db.add(campaign)
+    await db.flush()
+
+    for i, em in enumerate(emails, start=1):
+        tmpl = MessageTemplate(
+            name=f"{slug} — email {i}",
+            channel=Channel.EMAIL,
+            subject=em.get("subject"),
+            body=em.get("body"),
+            created_by=current_user.id,
+        )
+        db.add(tmpl)
+        await db.flush()
+        db.add(CampaignStep(
+            campaign_id=campaign.id, step_order=i,
+            name=f"Email day {em.get('day', i)}", channel=Channel.EMAIL,
+            template_id=tmpl.id,
+            delay_days=max(int(em.get("day", i) or i) - 1, 0),
+        ))
+    await db.flush()
+
+    # ── Draft step-1 outreach per recipient (approval-gated) ──────────────────
+    first = emails[0]
+    drafted = 0
+    skipped_suppressed = 0
+    for p in prospects:
+        if p.is_do_not_contact or p.is_suppressed:
+            skipped_suppressed += 1
+            continue
+        fname = p.first_name or (p.full_name or "").split()[0] if p.full_name else ""
+        subject = _merge_tokens(first.get("subject") or f"{page.headline or 'Following up'}", fname)
+        text = _merge_tokens(first.get("body") or "", fname)
+        db.add(CampaignOutreach(
+            campaign_id=campaign.id, prospect_id=p.id,
+            channel=OutreachChannel.EMAIL, step_number=1,
+            status=OutreachStatus.DRAFT, approval_status="pending",
+            template_name=f"{slug} email 1",
+            subject=subject, body_text=text, body_html=_email_html(text),
+            merge_data={"campaign_page_slug": slug, "source": "deploy"},
+        ))
+        drafted += 1
+
+    await db.commit()
+    await log_event(db, "campaign_page.deployed", actor_type="user", actor_id=current_user.id,
+                    resource_type="campaign_page", resource_id=page.id,
+                    details={"campaign_id": campaign.id, "recipients": drafted})
+    await db.commit()
+    log.info("campaign_page.deployed", slug=slug, campaign=campaign.id,
+             drafted=drafted, skipped=skipped_suppressed)
+    return {
+        "campaign_id": campaign.id,
+        "campaign_status": "active",
+        "steps": len(emails),
+        "step1_drafts": drafted,
+        "skipped_suppressed": skipped_suppressed,
+        "note": "Step-1 emails are drafts awaiting approval. The scheduler drafts "
+                "steps 2+ automatically as each delay_days window elapses.",
     }

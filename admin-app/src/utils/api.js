@@ -50,10 +50,14 @@ async function request(method, path, body = null, options = {}) {
   })
 
   if (res.status === 401) {
-    localStorage.removeItem('ms_token')
-    localStorage.removeItem('ms_user')
-    window.location.href = '/login'
-    return
+    const err = await res.json().catch(() => ({ detail: 'Unauthorized' }))
+    // Only redirect to /login for authenticated requests (not the login endpoint itself)
+    if (!path.includes('/auth/login') && !path.includes('/auth/refresh')) {
+      localStorage.removeItem('ms_token')
+      localStorage.removeItem('ms_user')
+      window.location.href = '/login'
+    }
+    throw new Error(err.detail || 'Invalid credentials')
   }
 
   if (!res.ok) {

@@ -123,8 +123,10 @@ This is where the mechanism lives. Make it feel simple.
 
 **Example:**
 "I've been doing this in Maryland and DC for over 10 years.
-5 stars on Zillow — real clients, real closings. You can read them yourself: [link]
+5 stars on Zillow — real clients, real closings. You can read them yourself at my Zillow profile (see REAL LINKS).
 NMLS #1454510. Licensed in MD and DC. Equal Housing Opportunity."
+
+**IMPORTANT:** Always write the actual Zillow URL from REAL LINKS — never output "[link]" or any bracketed placeholder.
 
 ---
 

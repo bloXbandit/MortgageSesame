@@ -22,7 +22,7 @@ from app.services.publishers.base import PlatformPublisher, PublishPayload, Publ
 
 log = structlog.get_logger()
 
-GRAPH = "https://graph.facebook.com/v19.0"
+GRAPH = "https://graph.facebook.com/v25.0"   # v19.0 expired May 2026
 MAX_POLL_ATTEMPTS = 36    # 36 × 10s = 6 minutes max for video processing
 
 
